@@ -1,0 +1,9 @@
+.idea
+*.iml
+target
+*.pyc
+.vagrant
+.metals
+*.log
+.bsp
+.bloop
