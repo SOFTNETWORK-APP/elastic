@@ -53,8 +53,9 @@ object SQLParser extends RegexParsers {
     identifier ~ (eq | ne) ~ (boolean | literal | double | int) ^^ { case i ~ o ~ v =>
       SQLExpression(i, o, v)
     }
-  def likeExpression: Parser[SQLExpression] = identifier ~ like ~ literal ^^ { case i ~ o ~ v =>
-    SQLExpression(i, o, v)
+  def likeExpression: Parser[SQLExpression] = identifier ~ not.? ~ like ~ literal ^^ {
+    case i ~ n ~ o ~ v =>
+      SQLExpression(i, o, v, n)
   }
   def comparisonExpression: Parser[SQLExpression] =
     identifier ~ (ge | gt | le | lt) ~ (double | int | literal) ^^ { case i ~ o ~ v =>

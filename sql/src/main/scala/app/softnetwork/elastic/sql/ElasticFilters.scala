@@ -47,28 +47,80 @@ object ElasticFilters {
         case ElasticGeoDistance(identifier, distance, lat, lon) =>
           geoDistanceQuery(identifier.identifier)
             .point(lat.value, lon.value) distance distance.value
-        case SQLExpression(identifier, operator, value) =>
+        case SQLExpression(identifier, operator, value, _not_) =>
           value match {
             case n: SQLNumeric[Any] @unchecked =>
               operator match {
-                case _: GE.type => rangeQuery(identifier.identifier) gte n.sql
-                case _: GT.type => rangeQuery(identifier.identifier) gt n.sql
-                case _: LE.type => rangeQuery(identifier.identifier) lte n.sql
-                case _: LT.type => rangeQuery(identifier.identifier) lt n.sql
-                case _: EQ.type => termQuery(identifier.identifier, n.sql)
-                case _: NE.type => not(termQuery(identifier.identifier, n.sql))
-                case _          => matchAllQuery
+                case _: GE.type =>
+                  _not_ match {
+                    case Some(_) => rangeQuery(identifier.identifier) lt n.sql
+                    case _       => rangeQuery(identifier.identifier) gte n.sql
+                  }
+                case _: GT.type =>
+                  _not_ match {
+                    case Some(_) => rangeQuery(identifier.identifier) lte n.sql
+                    case _       => rangeQuery(identifier.identifier) gt n.sql
+                  }
+                case _: LE.type =>
+                  _not_ match {
+                    case Some(_) => rangeQuery(identifier.identifier) gt n.sql
+                    case _       => rangeQuery(identifier.identifier) lte n.sql
+                  }
+                case _: LT.type =>
+                  _not_ match {
+                    case Some(_) => rangeQuery(identifier.identifier) gte n.sql
+                    case _       => rangeQuery(identifier.identifier) lt n.sql
+                  }
+                case _: EQ.type =>
+                  _not_ match {
+                    case Some(_) => not(termQuery(identifier.identifier, n.sql))
+                    case _       => termQuery(identifier.identifier, n.sql)
+                  }
+                case _: NE.type =>
+                  _not_ match {
+                    case Some(_) => termQuery(identifier.identifier, n.sql)
+                    case _       => not(termQuery(identifier.identifier, n.sql))
+                  }
+                case _ => matchAllQuery
               }
             case l: SQLLiteral =>
               operator match {
-                case _: LIKE.type => regexQuery(identifier.identifier, toRegex(l.value))
-                case _: GE.type   => rangeQuery(identifier.identifier) gte l.value
-                case _: GT.type   => rangeQuery(identifier.identifier) gt l.value
-                case _: LE.type   => rangeQuery(identifier.identifier) lte l.value
-                case _: LT.type   => rangeQuery(identifier.identifier) lt l.value
-                case _: EQ.type   => termQuery(identifier.identifier, l.value)
-                case _: NE.type   => not(termQuery(identifier.identifier, l.value))
-                case _            => matchAllQuery
+                case _: LIKE.type =>
+                  _not_ match {
+                    case Some(_) => not(regexQuery(identifier.identifier, toRegex(l.value)))
+                    case _       => regexQuery(identifier.identifier, toRegex(l.value))
+                  }
+                case _: GE.type =>
+                  _not_ match {
+                    case Some(_) => rangeQuery(identifier.identifier) lt l.value
+                    case _       => rangeQuery(identifier.identifier) gte l.value
+                  }
+                case _: GT.type =>
+                  _not_ match {
+                    case Some(_) => rangeQuery(identifier.identifier) lte l.value
+                    case _       => rangeQuery(identifier.identifier) gt l.value
+                  }
+                case _: LE.type =>
+                  _not_ match {
+                    case Some(_) => rangeQuery(identifier.identifier) gt l.value
+                    case _       => rangeQuery(identifier.identifier) lte l.value
+                  }
+                case _: LT.type =>
+                  _not_ match {
+                    case Some(_) => rangeQuery(identifier.identifier) gte l.value
+                    case _       => rangeQuery(identifier.identifier) lt l.value
+                  }
+                case _: EQ.type =>
+                  _not_ match {
+                    case Some(_) => not(termQuery(identifier.identifier, l.value))
+                    case _       => termQuery(identifier.identifier, l.value)
+                  }
+                case _: NE.type =>
+                  _not_ match {
+                    case Some(_) => termQuery(identifier.identifier, l.value)
+                    case _       => not(termQuery(identifier.identifier, l.value))
+                  }
+                case _ => matchAllQuery
               }
             case b: SQLBoolean =>
               operator match {
@@ -80,10 +132,10 @@ object ElasticFilters {
           }
         case SQLIsNull(identifier)    => not(existsQuery(identifier.identifier))
         case SQLIsNotNull(identifier) => existsQuery(identifier.identifier)
-        case SQLPredicate(left, operator, right, _not) =>
+        case SQLPredicate(left, operator, right, _not_) =>
           operator match {
             case _: AND.type =>
-              if (_not.isDefined)
+              if (_not_.isDefined)
                 bool(Seq(_filter(left)), Seq.empty, Seq(_filter(right)))
               else
                 boolQuery().filter(_filter(left), _filter(right))

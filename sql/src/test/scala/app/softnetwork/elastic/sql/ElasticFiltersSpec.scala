@@ -156,6 +156,24 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |}""".stripMargin.replaceAll("\\s", "")
   }
 
+  it should "filter literal not like" in {
+    val result = ElasticFilters.filter(literalNotLike)
+    query2String(result) shouldBe
+      """{
+        |"query":{
+        |    "bool": {
+        |      "must_not": [{
+        |        "regexp": {
+        |          "identifier": {
+        |            "value": ".*?un.*?"
+        |          }
+        |        }
+        |      }]
+        |    }
+        |  }
+        |}""".stripMargin.replaceAll("\\s", "")
+  }
+
   it should "filter between" in {
     val result = ElasticFilters.filter(betweenExpression)
     query2String(result) shouldBe """{

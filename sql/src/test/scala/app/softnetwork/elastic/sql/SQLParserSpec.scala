@@ -19,6 +19,7 @@ object Queries {
   val boolEq = """select * from Table where identifier = true"""
   val boolNe = """select * from Table where identifier <> false"""
   val literalLike = """select * from Table where identifier like "%un%""""
+  val literalNotLike = """select * from Table where identifier not like "%un%""""
   val betweenExpression = """select * from Table where identifier between "1" and "2""""
   val andPredicate = "select * from Table where (identifier1 = 1) and (identifier2 > 2)"
   val orPredicate = "select * from Table where (identifier1 = 1) or (identifier2 > 2)"
@@ -104,6 +105,11 @@ class SQLParserSpec extends AnyFlatSpec with Matchers {
   it should "parse literal like" in {
     val result = SQLParser(literalLike)
     result.right.get.sql should ===(literalLike)
+  }
+
+  it should "parse literal not like" in {
+    val result = SQLParser(literalNotLike)
+    result.right.get.sql should ===(literalNotLike)
   }
 
   it should "parse literal ne" in {

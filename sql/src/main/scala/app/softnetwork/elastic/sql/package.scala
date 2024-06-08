@@ -191,9 +191,10 @@ package object sql {
   case class SQLExpression(
     columnName: SQLIdentifier,
     operator: SQLExpressionOperator,
-    value: SQLToken
+    value: SQLToken,
+    not: Option[NOT.type] = None
   ) extends SQLCriteria {
-    override def sql = s"$columnName ${operator.sql} $value"
+    override def sql = s"$columnName ${not.map(_ => "not ").getOrElse("")}${operator.sql} $value"
   }
 
   case class SQLIsNull(columnName: SQLIdentifier) extends SQLCriteria {
@@ -263,7 +264,7 @@ package object sql {
     def _retrieveType(criteria: SQLCriteria): Option[String] = criteria match {
       case SQLPredicate(left, _, _, _) => _retrieveType(left)
       case SQLBetween(col, _, _)       => Some(col.identifier.split("\\.").head)
-      case SQLExpression(col, _, _)    => Some(col.identifier.split("\\.").head)
+      case SQLExpression(col, _, _, _) => Some(col.identifier.split("\\.").head)
       case SQLIn(col, _, _)            => Some(col.identifier.split("\\.").head)
       case SQLIsNull(col)              => Some(col.identifier.split("\\.").head)
       case SQLIsNotNull(col)           => Some(col.identifier.split("\\.").head)
@@ -295,7 +296,7 @@ package object sql {
     function: Option[SQLFunction] = None
   )(implicit ev$1: T => Ordered[T]): Option[T] = {
     criteria match {
-      case Some(SQLExpression(_, operator, value: SQLValue[T] @unchecked)) =>
+      case Some(SQLExpression(_, operator, value: SQLValue[T] @unchecked, _)) =>
         value.choose[T](values, Some(operator))
       case _ =>
         function match {
