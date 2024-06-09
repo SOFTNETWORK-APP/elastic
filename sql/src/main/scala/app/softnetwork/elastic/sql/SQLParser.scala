@@ -24,7 +24,7 @@ object SQLParser extends RegexParsers {
     }
 
   def literal: Parser[SQLLiteral] =
-    """"[^"]*"""".r ^^ (str => SQLLiteral(str.substring(1, str.length - 1)))
+    """"[^"]*"|'[^']*'""".r ^^ (str => SQLLiteral(str.substring(1, str.length - 1)))
 
   def int: Parser[SQLInt] = """(-)?(0|[1-9]\d*)""".r ^^ (str => SQLInt(str.toInt))
 
@@ -50,16 +50,16 @@ object SQLParser extends RegexParsers {
   }
 
   def equalityExpression: Parser[SQLExpression] =
-    identifier ~ (eq | ne) ~ (boolean | literal | double | int) ^^ { case i ~ o ~ v =>
-      SQLExpression(i, o, v)
+    not.? ~ identifier ~ (eq | ne) ~ (boolean | literal | double | int) ^^ { case n ~ i ~ o ~ v =>
+      SQLExpression(i, o, v, n)
     }
   def likeExpression: Parser[SQLExpression] = identifier ~ not.? ~ like ~ literal ^^ {
     case i ~ n ~ o ~ v =>
       SQLExpression(i, o, v, n)
   }
   def comparisonExpression: Parser[SQLExpression] =
-    identifier ~ (ge | gt | le | lt) ~ (double | int | literal) ^^ { case i ~ o ~ v =>
-      SQLExpression(i, o, v)
+    not.? ~ identifier ~ (ge | gt | le | lt) ~ (double | int | literal) ^^ { case n ~ i ~ o ~ v =>
+      SQLExpression(i, o, v, n)
     }
 
   def inLiteralExpression: Parser[SQLCriteria] =
