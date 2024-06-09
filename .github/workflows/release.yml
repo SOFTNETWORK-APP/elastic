@@ -1,0 +1,62 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: Release
+# Run workflow on commits to the `main` branch
+on:
+  workflow_dispatch:
+  push:
+    branches: 
+      - 'main'
+#      - '*'         # matches every branch that doesn't contain a '/'
+#      - '*/*'       # matches every branch containing a single '/'
+#      - '**'        # matches every branch
+#      - '!main'     # excludes main  
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: self-hosted
+#    runs-on: ubuntu-latest
+    env:
+      # define Java options for both official sbt and sbt-extras
+      JAVA_OPTS: -Xms2048M -Xmx2048M -Xss6M -XX:ReservedCodeCacheSize=256M -Dfile.encoding=UTF-8
+      JVM_OPTS:  -Xms2048M -Xmx2048M -Xss6M -XX:ReservedCodeCacheSize=256M -Dfile.encoding=UTF-8
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Set up JDK 8
+      uses: actions/setup-java@v3
+      with:
+        java-version: '8'
+        distribution: 'temurin'
+#        cache: 'sbt'
+    - name: Run tests & Coverage Report
+      run: sbt coverage test coverageReport coverageAggregate
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: sql/target/scala-2.12/coverage-report/cobertura.xml,client/testkit/target/scala-2.12/coverage-report/cobertura.xml,persistence/target/scala-2.12/coverage-report/cobertura.xml,teskit/target/scala-2.12/coverage-report/cobertura.xml
+        flags: unittests
+        fail_ci_if_error: false
+        verbose: true
+    - name: Publish
+      run: sbt publish
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up JDK 8
+        uses: actions/setup-java@v3
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+#          cache: 'sbt'
+      - name: Formatting
+        run: sbt scalafmtSbtCheck scalafmtCheck test:scalafmtCheck

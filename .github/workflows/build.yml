@@ -1,0 +1,56 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: 
+      - '!main'
+#      - '*'         # matches every branch that doesn't contain a '/'
+#      - '*/*'       # matches every branch containing a single '/'
+#      - '**'        # matches every branch
+#      - '!main'     # excludes main  
+  pull_request:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: self-hosted
+#    runs-on: ubuntu-latest
+    env:
+      # define Java options for both official sbt and sbt-extras
+      JAVA_OPTS: -Xms2048M -Xmx2048M -Xss6M -XX:ReservedCodeCacheSize=256M -Dfile.encoding=UTF-8
+      JVM_OPTS:  -Xms2048M -Xmx2048M -Xss6M -XX:ReservedCodeCacheSize=256M -Dfile.encoding=UTF-8
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Set up JDK 8
+      uses: actions/setup-java@v3
+      with:
+        java-version: '8'
+        distribution: 'temurin'
+#        cache: 'sbt'
+    - name: Run tests
+      run: sbt test
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Set up JDK 8
+        uses: actions/setup-java@v3
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+#          cache: 'sbt'
+      - name: Formatting
+        run: sbt scalafmtSbtCheck scalafmtCheck test:scalafmtCheck
