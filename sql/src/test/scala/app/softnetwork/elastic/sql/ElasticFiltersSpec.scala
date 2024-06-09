@@ -159,7 +159,7 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
   it should "filter literal not like" in {
     val result = ElasticFilters.filter(literalNotLike)
     query2String(result) shouldBe
-      """{
+    """{
         |"query":{
         |    "bool": {
         |      "must_not": [{

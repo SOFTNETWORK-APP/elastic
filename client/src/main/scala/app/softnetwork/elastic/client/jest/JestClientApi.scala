@@ -12,7 +12,7 @@ import io.searchbox.action.BulkableAction
 import io.searchbox.core._
 import io.searchbox.core.search.aggregation.RootAggregation
 import io.searchbox.indices.aliases.{AddAliasMapping, ModifyAliases}
-import io.searchbox.indices.mapping.PutMapping
+import io.searchbox.indices.mapping.{GetMapping, PutMapping}
 import io.searchbox.indices.settings.UpdateSettings
 import io.searchbox.indices._
 import io.searchbox.params.Parameters
@@ -71,9 +71,12 @@ trait JestUpdateSettingsApi extends UpdateSettingsApi with JestClientCompanion {
     openIndex(index)
 }
 
-trait JestMappingApi extends MappingApi with JestClientCompanion {
+trait JestMappingApi extends MappingApi with JestClientCompanion { _: IndicesApi =>
   override def setMapping(index: String, _type: String, mapping: String): Boolean =
     apply().execute(new PutMapping.Builder(index, _type, mapping).build()).isSucceeded
+
+  override def getMapping(index: String, _type: String): String =
+    apply().execute(new GetMapping.Builder().addIndex(index).addType(_type).build()).getJsonString
 }
 
 trait JestRefreshApi extends RefreshApi with JestClientCompanion {

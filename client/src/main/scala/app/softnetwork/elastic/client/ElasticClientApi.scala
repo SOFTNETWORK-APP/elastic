@@ -117,6 +117,7 @@ trait UpdateSettingsApi { _: IndicesApi =>
 
 trait MappingApi {
   def setMapping(index: String, _type: String, mapping: String): Boolean
+  def getMapping(index: String, _type: String): String
 }
 
 trait RefreshApi {
