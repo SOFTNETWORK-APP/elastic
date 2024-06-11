@@ -10,14 +10,14 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   import scala.language.implicitConversions
 
   "ElasticQuery" should "perform native count" in {
-    val results = ElasticQuery.count(
-      SQLQuery("select count($t.id) as c2 from Table as t where $t.nom = \"Nom\"")
+    val results = ElasticQuery.aggregate(
+      SQLQuery("select count(t.id) c2 from Table t where t.nom = \"Nom\"")
     )
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe false
     result.distinct shouldBe false
-    result.agg shouldBe "agg_id"
+    result.aggName shouldBe "agg_id"
     result.field shouldBe "c2"
     result.sources shouldBe Seq[String]("Table")
     result.query shouldBe
@@ -47,14 +47,14 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform count distinct" in {
-    val results = ElasticQuery.count(
-      SQLQuery("select count(distinct $t.id) as c2 from Table as t where $t.nom = \"Nom\"")
+    val results = ElasticQuery.aggregate(
+      SQLQuery("select count(distinct t.id) as c2 from Table as t where nom = \"Nom\"")
     )
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe false
     result.distinct shouldBe true
-    result.agg shouldBe "agg_distinct_id"
+    result.aggName shouldBe "agg_distinct_id"
     result.field shouldBe "c2"
     result.sources shouldBe Seq[String]("Table")
     result.query shouldBe
@@ -84,14 +84,14 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested count" in {
-    val results = ElasticQuery.count(
-      SQLQuery("select count(email.value) as email from index where nom = \"Nom\"")
+    val results = ElasticQuery.aggregate(
+      SQLQuery("select count(i.email.value) as email from index as i where i.nom = \"Nom\"")
     )
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe false
-    result.agg shouldBe "nested_email.agg_email_value"
+    result.aggName shouldBe "nested_email.agg_email_value"
     result.field shouldBe "email"
     result.sources shouldBe Seq[String]("index")
     result.query shouldBe
@@ -128,7 +128,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested count with nested criteria" in {
-    val results = ElasticQuery.count(
+    val results = ElasticQuery.aggregate(
       SQLQuery(
         "select count(email.value) as email from index where nom = \"Nom\" and (profile.postalCode in (\"75001\",\"75002\"))"
       )
@@ -137,7 +137,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe false
-    result.agg shouldBe "nested_email.agg_email_value"
+    result.aggName shouldBe "nested_email.agg_email_value"
     result.field shouldBe "email"
     result.sources shouldBe Seq[String]("index")
     result.query shouldBe
@@ -188,7 +188,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested count with filter" in {
-    val results = ElasticQuery.count(
+    val results = ElasticQuery.aggregate(
       SQLQuery(
         "select count(email.value) as email filter[email.context = \"profile\"] from index where nom = \"Nom\" and (profile.postalCode in (\"75001\",\"75002\"))"
       )
@@ -197,7 +197,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe false
-    result.agg shouldBe "nested_email.filtered_agg.agg_email_value"
+    result.aggName shouldBe "nested_email.filtered_agg.agg_email_value"
     result.field shouldBe "email"
     result.sources shouldBe Seq[String]("index")
     result.query shouldBe
@@ -259,7 +259,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "accept and not operator" in {
-    val results = ElasticQuery.count(
+    val results = ElasticQuery.aggregate(
       SQLQuery(
         "select count(distinct email.value) as email from index where (profile.postalCode = \"33600\" and not profile.postalCode = \"75001\")"
       )
@@ -268,7 +268,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe true
-    result.agg shouldBe "nested_email.agg_distinct_email_value"
+    result.aggName shouldBe "nested_email.agg_distinct_email_value"
     result.field shouldBe "email"
     result.sources shouldBe Seq[String]("index")
     result.query shouldBe
@@ -327,7 +327,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "accept date filtering" in {
-    val results = ElasticQuery.count(
+    val results = ElasticQuery.aggregate(
       SQLQuery(
         "select count(distinct email.value) as email from index where profile.postalCode = \"33600\" and profile.createdDate <= \"now-35M/M\""
       )
@@ -336,7 +336,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe true
-    result.agg shouldBe "nested_email.agg_distinct_email_value"
+    result.aggName shouldBe "nested_email.agg_distinct_email_value"
     result.field shouldBe "email"
     result.sources shouldBe Seq[String]("index")
     result.query shouldBe

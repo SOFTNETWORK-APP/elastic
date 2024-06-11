@@ -4,7 +4,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
 object Queries {
-  val numericalEq = "select $t.col1,$t.col2 from Table as $t where $t.identifier = 1.0"
+  val numericalEq = "select t.col1,t.col2 from Table as t where t.identifier = 1.0"
   val numericalLt = "select * from Table where identifier < 1"
   val numericalLe = "select * from Table where identifier <= 1"
   val numericalGt = "select * from Table where identifier > 1"
@@ -51,8 +51,8 @@ object Queries {
     "select * from Table where identifier not in (1.0,2.1,3.4)"
   val nestedWithBetween =
     "select * from Table where nested((ciblage.Archivage_CreationDate between \"now-3M/M\" and \"now\") and (ciblage.statutComportement = 1))"
-  val count = "select count($t.id) as c1 from Table as t where $t.nom = \"Nom\""
-  val countDistinct = "select count(distinct $t.id) as c2 from Table as t where $t.nom = \"Nom\""
+  val count = "select count(t.id) as c1 from Table as t where t.nom = \"Nom\""
+  val countDistinct = "select count(distinct t.id) as c2 from Table as t where t.nom = \"Nom\""
   val countNested =
     "select count(email.value) as email from crmgp where profile.postalCode in (\"75001\",\"75002\")"
   val isNull = "select * from Table where identifier is null"
@@ -254,9 +254,7 @@ class SQLParserSpec extends AnyFlatSpec with Matchers {
 
   it should "parse count with nested criteria" in {
     val result = SQLParser(countNested)
-    result.right.get.sql should ===(
-      "select count(email.value) as email from crmgp where nested(profile.postalCode in (\"75001\",\"75002\"))"
-    )
+    result.right.get.sql should ===(countNested)
   }
 
   it should "parse is null" in {

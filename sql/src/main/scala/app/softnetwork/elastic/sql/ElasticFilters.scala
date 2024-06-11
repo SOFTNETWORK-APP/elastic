@@ -22,7 +22,7 @@ object ElasticFilters {
     filter(criteria)
   }
 
-  def filter(criteria: Option[SQLCriteria]): Query = {
+  def filter(criteria: Option[SQLCriteria], insideNestedAgg: Option[String] = None): Query = {
 
     var _innerHits: Set[String] = Set.empty
 
@@ -42,44 +42,119 @@ object ElasticFilters {
       }
     }
 
-    def _filter(criteria: SQLCriteria): Query = {
+    def nest(
+      nestedType: Option[String],
+      query: Query,
+      insideNested: Option[String] = None
+    ): Query = {
+      nestedType match {
+        case Some(n) if !insideNested.contains(n) =>
+          nestedQuery(n).query(query).inner(innerHits(_innerHit(n)))
+        case _ => query
+      }
+    }
+
+    def _filter(criteria: SQLCriteria, insideNested: Option[String] = None): Query = {
       criteria match {
         case ElasticGeoDistance(identifier, distance, lat, lon) =>
-          geoDistanceQuery(identifier.identifier)
-            .point(lat.value, lon.value) distance distance.value
+          nest(
+            identifier.nestedType,
+            geoDistanceQuery(identifier.columnName)
+              .point(lat.value, lon.value) distance distance.value
+          )
         case SQLExpression(identifier, operator, value, _not_) =>
           value match {
             case n: SQLNumeric[Any] @unchecked =>
               operator match {
                 case _: GE.type =>
                   _not_ match {
-                    case Some(_) => rangeQuery(identifier.identifier) lt n.sql
-                    case _       => rangeQuery(identifier.identifier) gte n.sql
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) lt n.sql,
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) gte n.sql,
+                        insideNested
+                      )
                   }
                 case _: GT.type =>
                   _not_ match {
-                    case Some(_) => rangeQuery(identifier.identifier) lte n.sql
-                    case _       => rangeQuery(identifier.identifier) gt n.sql
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) lte n.sql,
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) gt n.sql,
+                        insideNested
+                      )
                   }
                 case _: LE.type =>
                   _not_ match {
-                    case Some(_) => rangeQuery(identifier.identifier) gt n.sql
-                    case _       => rangeQuery(identifier.identifier) lte n.sql
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) gt n.sql,
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) lte n.sql,
+                        insideNested
+                      )
                   }
                 case _: LT.type =>
                   _not_ match {
-                    case Some(_) => rangeQuery(identifier.identifier) gte n.sql
-                    case _       => rangeQuery(identifier.identifier) lt n.sql
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) gte n.sql,
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) lt n.sql,
+                        insideNested
+                      )
                   }
                 case _: EQ.type =>
                   _not_ match {
-                    case Some(_) => not(termQuery(identifier.identifier, n.sql))
-                    case _       => termQuery(identifier.identifier, n.sql)
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        not(termQuery(identifier.columnName, n.sql)),
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        termQuery(identifier.columnName, n.sql),
+                        insideNested
+                      )
                   }
                 case _: NE.type =>
                   _not_ match {
-                    case Some(_) => termQuery(identifier.identifier, n.sql)
-                    case _       => not(termQuery(identifier.identifier, n.sql))
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        termQuery(identifier.columnName, n.sql),
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        not(termQuery(identifier.columnName, n.sql)),
+                        insideNested
+                      )
                   }
                 case _ => matchAllQuery
               }
@@ -87,91 +162,182 @@ object ElasticFilters {
               operator match {
                 case _: LIKE.type =>
                   _not_ match {
-                    case Some(_) => not(regexQuery(identifier.identifier, toRegex(l.value)))
-                    case _       => regexQuery(identifier.identifier, toRegex(l.value))
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        not(regexQuery(identifier.columnName, toRegex(l.value))),
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        regexQuery(identifier.columnName, toRegex(l.value)),
+                        insideNested
+                      )
                   }
                 case _: GE.type =>
                   _not_ match {
-                    case Some(_) => rangeQuery(identifier.identifier) lt l.value
-                    case _       => rangeQuery(identifier.identifier) gte l.value
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) lt l.value,
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) gte l.value,
+                        insideNested
+                      )
                   }
                 case _: GT.type =>
                   _not_ match {
-                    case Some(_) => rangeQuery(identifier.identifier) lte l.value
-                    case _       => rangeQuery(identifier.identifier) gt l.value
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) lte l.value,
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) gt l.value,
+                        insideNested
+                      )
                   }
                 case _: LE.type =>
                   _not_ match {
-                    case Some(_) => rangeQuery(identifier.identifier) gt l.value
-                    case _       => rangeQuery(identifier.identifier) lte l.value
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) gt l.value,
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) lte l.value,
+                        insideNested
+                      )
                   }
                 case _: LT.type =>
                   _not_ match {
-                    case Some(_) => rangeQuery(identifier.identifier) gte l.value
-                    case _       => rangeQuery(identifier.identifier) lt l.value
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) gte l.value,
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        rangeQuery(identifier.columnName) lt l.value,
+                        insideNested
+                      )
                   }
                 case _: EQ.type =>
                   _not_ match {
-                    case Some(_) => not(termQuery(identifier.identifier, l.value))
-                    case _       => termQuery(identifier.identifier, l.value)
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        not(termQuery(identifier.columnName, l.value)),
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        termQuery(identifier.columnName, l.value),
+                        insideNested
+                      )
                   }
                 case _: NE.type =>
                   _not_ match {
-                    case Some(_) => termQuery(identifier.identifier, l.value)
-                    case _       => not(termQuery(identifier.identifier, l.value))
+                    case Some(_) =>
+                      nest(
+                        identifier.nestedType,
+                        termQuery(identifier.columnName, l.value),
+                        insideNested
+                      )
+                    case _ =>
+                      nest(
+                        identifier.nestedType,
+                        not(termQuery(identifier.columnName, l.value)),
+                        insideNested
+                      )
                   }
                 case _ => matchAllQuery
               }
             case b: SQLBoolean =>
               operator match {
-                case _: EQ.type => termQuery(identifier.identifier, b.value)
-                case _: NE.type => not(termQuery(identifier.identifier, b.value))
-                case _          => matchAllQuery
+                case _: EQ.type =>
+                  nest(
+                    identifier.nestedType,
+                    termQuery(identifier.columnName, b.value),
+                    insideNested
+                  )
+                case _: NE.type =>
+                  nest(
+                    identifier.nestedType,
+                    not(termQuery(identifier.columnName, b.value)),
+                    insideNested
+                  )
+                case _ => matchAllQuery
               }
             case _ => matchAllQuery
           }
-        case SQLIsNull(identifier)    => not(existsQuery(identifier.identifier))
-        case SQLIsNotNull(identifier) => existsQuery(identifier.identifier)
+        case SQLIsNull(identifier) =>
+          nest(identifier.nestedType, not(existsQuery(identifier.columnName)), insideNested)
+        case SQLIsNotNull(identifier) =>
+          nest(identifier.nestedType, existsQuery(identifier.columnName), insideNested)
         case SQLPredicate(left, operator, right, _not_) =>
           operator match {
             case _: AND.type =>
-              if (_not_.isDefined)
-                bool(Seq(_filter(left)), Seq.empty, Seq(_filter(right)))
-              else
-                boolQuery().filter(_filter(left), _filter(right))
-            case _: OR.type => should(_filter(left), _filter(right))
+              _not_ match {
+                case Some(_) =>
+                  bool(
+                    Seq(_filter(left, insideNested)),
+                    Seq.empty,
+                    Seq(_filter(right, insideNested))
+                  )
+                case _ =>
+                  boolQuery().filter(_filter(left, insideNested), _filter(right, insideNested))
+              }
+            case _: OR.type => should(_filter(left, insideNested), _filter(right, insideNested))
             case _          => matchAllQuery
           }
-        case SQLIn(identifier, values, n) =>
+        case SQLIn(identifier, values, _not_) =>
           val _values: Seq[Any] = values.innerValues
           val t =
             _values.headOption match {
               case Some(_: Double) =>
-                termsQuery(identifier.identifier, _values.asInstanceOf[Seq[Double]])
+                termsQuery(identifier.columnName, _values.asInstanceOf[Seq[Double]])
               case Some(_: Integer) =>
-                termsQuery(identifier.identifier, _values.asInstanceOf[Seq[Integer]])
+                termsQuery(identifier.columnName, _values.asInstanceOf[Seq[Integer]])
               case Some(_: Long) =>
-                termsQuery(identifier.identifier, _values.asInstanceOf[Seq[Long]])
-              case _ => termsQuery(identifier.identifier, _values.map(_.toString))
+                termsQuery(identifier.columnName, _values.asInstanceOf[Seq[Long]])
+              case _ => termsQuery(identifier.columnName, _values.map(_.toString))
             }
-          n match {
-            case Some(_) => not(t)
-            case None    => t
+          _not_ match {
+            case Some(_) => nest(identifier.nestedType, not(t), insideNested)
+            case None    => nest(identifier.nestedType, t, insideNested)
           }
         case SQLBetween(identifier, from, to) =>
-          rangeQuery(identifier.identifier) gte from.value lte to.value
+          nest(
+            identifier.nestedType,
+            rangeQuery(identifier.columnName) gte from.value lte to.value,
+            insideNested
+          )
         case relation: ElasticRelation =>
           import scala.language.reflectiveCalls
-          val t = relation.`type`
-          t match {
-            case Some(_) =>
+          relation.`type` match {
+            case Some(t) =>
               relation match {
                 case _: ElasticNested =>
-                  nestedQuery(t.get, _filter(relation.criteria)).inner(innerHits(_innerHit(t.get)))
+                  nestedQuery(t, _filter(relation.criteria, Some(t))).inner(innerHits(_innerHit(t)))
                 case _: ElasticChild =>
-                  hasChildQuery(t.get, _filter(relation.criteria), ScoreMode.None)
+                  hasChildQuery(t, _filter(relation.criteria, Some(t)), ScoreMode.None)
                 case _: ElasticParent =>
-                  hasParentQuery(t.get, _filter(relation.criteria), score = false)
+                  hasParentQuery(t, _filter(relation.criteria, Some(t)), score = false)
                 case _ => matchAllQuery
               }
             case _ => matchAllQuery
@@ -181,7 +347,7 @@ object ElasticFilters {
     }
 
     criteria match {
-      case Some(c) => _filter(c)
+      case Some(c) => _filter(c, insideNestedAgg)
       case _       => matchAllQuery
     }
 

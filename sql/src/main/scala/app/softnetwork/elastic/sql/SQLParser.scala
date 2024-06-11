@@ -3,24 +3,29 @@ package app.softnetwork.elastic.sql
 import scala.util.parsing.combinator.RegexParsers
 
 /** Created by smanciot on 27/06/2018.
+  *
+  * SQL Parser for ElasticSearch
+  *
+  * TODO add support for SQL :
+  *   - EXCEPT,
+  *   - UNION,
+  *   - UNNEST,
+  *   - JOIN,
+  *   - GROUP BY,
+  *   - ORDER BY,
+  *   - HAVING, etc.
   */
 object SQLParser extends RegexParsers {
 
-  val regexAlias = """\$?[a-zA-Z0-9_]*"""
-
-  val regexRef = """\$[a-zA-Z0-9_]*"""
+  val regexAlias = """\b(?!(?i)where\b)\b(?!(?i)from\b)[a-zA-Z0-9_]*"""
 
   def identifier: Parser[SQLIdentifier] =
-    "(?i)distinct".r.? ~ (regexRef.r ~ ".").? ~ """[\*a-zA-Z_\-][a-zA-Z0-9_\-\.\[\]]*""".r ^^ {
-      case d ~ a ~ str =>
-        SQLIdentifier(
-          str,
-          a match {
-            case Some(x) => Some(x._1)
-            case _       => None
-          },
-          d
-        )
+    "(?i)distinct".r.? ~ """[\*a-zA-Z_\-][a-zA-Z0-9_\-\.\[\]]*""".r ^^ { case d ~ str =>
+      SQLIdentifier(
+        str,
+        None,
+        d
+      )
     }
 
   def literal: Parser[SQLLiteral] =
@@ -96,15 +101,7 @@ object SQLParser extends RegexParsers {
 
   def criteria: Parser[SQLCriteria] =
     start.? ~ (equalityExpression | likeExpression | comparisonExpression | inLiteralExpression | inNumericalExpression | betweenExpression | isNotNullExpression | isNullExpression | distanceExpression) ~ end.? ^^ {
-      case _ ~ c ~ _ =>
-        c match {
-          case x: SQLExpression if x.columnName.nested  => ElasticNested(x)
-          case y: SQLIn[_, _] if y.columnName.nested    => ElasticNested(y)
-          case z: SQLBetween if z.columnName.nested     => ElasticNested(z)
-          case n: SQLIsNull if n.columnName.nested      => ElasticNested(n)
-          case nn: SQLIsNotNull if nn.columnName.nested => ElasticNested(nn)
-          case _                                        => c
-        }
+      case _ ~ c ~ _ => c
     }
 
   @scala.annotation.tailrec
@@ -168,13 +165,13 @@ object SQLParser extends RegexParsers {
     case _ ~ _ ~ p ~ _ => ElasticParent(unwrappPredicate(p))
   }
 
-  def alias: Parser[SQLAlias] = "(?i)as".r ~ regexAlias.r ^^ { case _ ~ b => SQLAlias(b) }
+  def alias: Parser[SQLAlias] = "(?i)as".r.? ~ regexAlias.r ^^ { case _ ~ b => SQLAlias(b) }
 
-  def count: Parser[SQLFunction] = "(?i)count".r ^^ (_ => SQLCount)
-  def min: Parser[SQLFunction] = "(?i)min".r ^^ (_ => SQLMin)
-  def max: Parser[SQLFunction] = "(?i)max".r ^^ (_ => SQLMax)
-  def avg: Parser[SQLFunction] = "(?i)avg".r ^^ (_ => SQLAvg)
-  def sum: Parser[SQLFunction] = "(?i)sum".r ^^ (_ => SQLSum)
+  def count: Parser[AggregateFunction] = "(?i)count".r ^^ (_ => Count)
+  def min: Parser[AggregateFunction] = "(?i)min".r ^^ (_ => Min)
+  def max: Parser[AggregateFunction] = "(?i)max".r ^^ (_ => Max)
+  def avg: Parser[AggregateFunction] = "(?i)avg".r ^^ (_ => Avg)
+  def sum: Parser[AggregateFunction] = "(?i)sum".r ^^ (_ => Sum)
 
   def _select: Parser[SELECT.type] = "(?i)select".r ^^ (_ => SELECT)
 
@@ -186,27 +183,27 @@ object SQLParser extends RegexParsers {
 
   def _limit: Parser[LIMIT.type] = "(?i)limit".r ^^ (_ => LIMIT)
 
-  def countFilter: Parser[SQLFilter] = _filter ~> "[" ~> whereCriteria <~ "]" ^^ { case rawTokens =>
+  def filter: Parser[SQLFilter] = _filter ~> "[" ~> whereCriteria <~ "]" ^^ { case rawTokens =>
     SQLFilter(
       processTokens(rawTokens, None, None, None) match {
-        case Some(c) => Some(unwrappCriteria(c))
+        case Some(c) => Some(c)
         case _       => None
       }
     )
   }
 
-  def countField: Parser[SQLCountField] =
-    count ~ start ~ identifier ~ end ~ alias.? ~ countFilter.? ^^ { case _ ~ _ ~ i ~ _ ~ a ~ f =>
-      new SQLCountField(i, a, f)
+  def field: Parser[SQLField] = identifier ~ alias.? ^^ { case i ~ a =>
+    SQLField(i, a)
+  }
+
+  def aggregate: Parser[SQLAggregate] =
+    (min | max | avg | sum | count) ~ start ~ identifier ~ end ~ alias.? ~ filter.? ^^ {
+      case agg ~ _ ~ i ~ _ ~ a ~ f => new SQLAggregate(agg, i, a, f)
     }
 
-  def field: Parser[SQLField] =
-    (min | max | avg | sum).? ~ start.? ~ identifier ~ end.? ~ alias.? ^^ {
-      case f ~ _ ~ i ~ _ ~ a => SQLField(f, i, a)
-    }
-
-  def selectCount: Parser[SQLSelect] = _select ~ rep1sep(countField, separator) ^^ {
-    case _ ~ fields => new SQLSelectCount(fields)
+  def selectAggregates: Parser[SQLSelect] = _select ~ rep1sep(aggregate, separator) ^^ {
+    case _ ~ aggregates =>
+      new SQLSelectAggregates(aggregates)
   }
 
   def select: Parser[SQLSelect] = _select ~ rep1sep(field, separator) ^^ { case _ ~ fields =>
@@ -236,10 +233,10 @@ object SQLParser extends RegexParsers {
   def limit: SQLParser.Parser[SQLLimit] = _limit ~ int ^^ { case _ ~ i => SQLLimit(i.value) }
 
   def tokens: Parser[_ <: SQLSelectQuery] = {
-    phrase((selectCount | select) ~ from ~ where.? ~ limit.?) ^^ { case s ~ f ~ w ~ l =>
+    phrase((selectAggregates | select) ~ from ~ where.? ~ limit.?) ^^ { case s ~ f ~ w ~ l =>
       s match {
-        case x: SQLSelectCount => new SQLCountQuery(x, f, w, l)
-        case _                 => SQLSelectQuery(s, f, w, l)
+        case x: SQLSelectAggregates => new SQLSelectAggregatesQuery(x, f, w, l)
+        case _                      => SQLSelectQuery(s, f, w, l)
       }
     }
   }
@@ -249,7 +246,7 @@ object SQLParser extends RegexParsers {
       case NoSuccess(msg, _) =>
         println(msg)
         Left(SQLParserError(msg))
-      case Success(result, _) => Right(result)
+      case Success(result, _) => Right(result.update())
     }
   }
 

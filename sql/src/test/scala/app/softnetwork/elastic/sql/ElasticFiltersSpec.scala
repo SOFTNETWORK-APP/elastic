@@ -757,15 +757,26 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |}""".stripMargin.replaceAll("\\s", "")
   }
 
-  it should "filter geo distance criteria" in {
+  it should "filter geo distance criteria" in { //FIXME implements UNNEST
     val result = ElasticFilters.filter(geoDistanceCriteria)
     query2String(result) shouldBe
     """{
 
         |"query":{
-        |    "geo_distance" : {
-        |      "distance":"5km",
-        |      "profile.location":[40.0,-70.0]
+        |    "nested": {
+        |        "path": "profile",
+        |        "query": {
+        |            "geo_distance": {
+        |                "distance": "5km",
+        |                "profile.location": [
+        |                    40.0,
+        |                    -70.0
+        |                ]
+        |            }
+        |        },
+        |        "inner_hits": {
+        |            "name": "profile"
+        |        }
         |    }
         |  }
         |}""".stripMargin.replaceAll("\\s", "")

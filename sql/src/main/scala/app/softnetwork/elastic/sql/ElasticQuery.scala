@@ -2,6 +2,7 @@ package app.softnetwork.elastic.sql
 
 import com.sksamuel.elastic4s.ElasticApi._
 import com.sksamuel.elastic4s.http.search.SearchBodyBuilderFn
+import com.sksamuel.elastic4s.searches.aggs.Aggregation
 import com.sksamuel.elastic4s.searches.queries.{BoolQuery, Query}
 
 /** Created by smanciot on 27/06/2018.
@@ -23,7 +24,7 @@ object ElasticQuery {
           case _       => None
         }
 
-        val fields = s.select.fields.map(_.identifier.identifier)
+        val fields = s.select.fields.map(_.identifier.columnName)
 
         val sources = s.from.tables.map((table: SQLTable) => table.source.sql)
 
@@ -49,34 +50,33 @@ object ElasticQuery {
     }
   }
 
-  def count(sqlQuery: SQLQuery): Seq[ElasticCount] = {
+  def aggregate(sqlQuery: SQLQuery): Seq[ElasticAggregation] = {
     val select: Option[SQLSelectQuery] = sqlQuery.query
-    count(select)
+    aggregate(select)
   }
 
-  private[this] def count(select: Option[SQLSelectQuery]): Seq[ElasticCount] = {
+  private[this] def aggregate(select: Option[SQLSelectQuery]): Seq[ElasticAggregation] = {
     select match {
-      case Some(s: SQLCountQuery) =>
+      case Some(s: SQLSelectAggregatesQuery) =>
         val criteria = s.where match {
           case Some(w) => w.criteria
           case _       => None
         }
         val sources = s.from.tables.map((table: SQLTable) => table.source.sql)
-        s.selectCount.countFields.map((countField: SQLCountField) => {
-          val sourceField = countField.identifier.identifier
+        s.selectAggregates.aggregates.map((aggregation: SQLAggregate) => {
+          val identifier = aggregation.identifier
+          val sourceField = identifier.columnName
 
-          val field = countField.alias match {
+          val field = aggregation.alias match {
             case Some(alias) => alias.alias
             case _           => sourceField
           }
 
-          val distinct = countField.identifier.distinct.isDefined
+          val distinct = identifier.distinct.isDefined
 
-          val filtered = countField.filter
+          val filtered = aggregation.filter
 
           val isFiltered = filtered.isDefined
-
-          val nested = sourceField.contains(".")
 
           val agg =
             if (distinct)
@@ -91,63 +91,77 @@ object ElasticQuery {
             case q: Query     => boolQuery().filter(q)
           }
 
-          val q =
-            if (sourceField.equalsIgnoreCase("_id")) { // "native" elastic count
-              SearchBodyBuilderFn(
-                search("") query {
-                  queryFiltered
-                }
-              ).string()
-            } else {
-              val _agg =
-                if (distinct)
-                  cardinalityAgg(agg, sourceField)
-                else
-                  valueCountAgg(agg, sourceField)
-
-              def _filtered = {
-                if (isFiltered) {
-                  val filteredAgg = s"filtered_agg"
-                  aggPath ++= Seq(filteredAgg)
-                  filterAgg(filteredAgg, filter(filtered.get.criteria)) subaggs {
-                    aggPath ++= Seq(agg)
-                    _agg
+          val q = {
+            aggregation.function match {
+              case Count if sourceField.equalsIgnoreCase("_id") =>
+                SearchBodyBuilderFn(
+                  search("") query {
+                    queryFiltered
                   }
-                } else {
-                  aggPath ++= Seq(agg)
-                  _agg
+                ).string()
+              case other => {
+                val _agg = {
+                  other match {
+                    case Count =>
+                      if (distinct)
+                        cardinalityAgg(agg, sourceField)
+                      else {
+                        valueCountAgg(agg, sourceField)
+                      }
+                    case Min => minAgg(agg, sourceField)
+                    case Max => maxAgg(agg, sourceField)
+                    case Avg => avgAgg(agg, sourceField)
+                    case Sum => sumAgg(agg, sourceField)
+                  }
                 }
-              }
 
-              SearchBodyBuilderFn(
-                search("") query {
-                  queryFiltered
+                def _filtered: Aggregation = {
+                  aggregation.filter match {
+                    case Some(f) =>
+                      val filteredAgg = s"filtered_agg"
+                      aggPath ++= Seq(filteredAgg)
+                      filterAgg(filteredAgg, filter(f.criteria, identifier.nestedType)) subaggs {
+                        aggPath ++= Seq(agg)
+                        _agg
+                      }
+                    case _ =>
+                      aggPath ++= Seq(agg)
+                      _agg
+                  }
                 }
-                aggregations {
-                  if (nested) {
-                    val path = sourceField.split("\\.").head
-                    val nestedAgg = s"nested_$path"
-                    aggPath ++= Seq(nestedAgg)
-                    nestedAggregation(nestedAgg, path) subaggs {
+
+                SearchBodyBuilderFn(
+                  search("") query {
+                    queryFiltered
+                  }
+                  aggregations {
+                    if (identifier.nested) {
+                      val path = sourceField.split("\\.").head
+                      val nestedAgg = s"nested_$path"
+                      aggPath ++= Seq(nestedAgg)
+                      nestedAggregation(nestedAgg, path) subaggs {
+                        _filtered
+                      }
+                    } else {
                       _filtered
                     }
-                  } else {
-                    _filtered
                   }
-                }
-                size 0
-              ).string()
+                  size 0
+                ).string()
+              }
             }
+          }
 
-          ElasticCount(
+          ElasticAggregation(
             aggPath.mkString("."),
             field,
             sourceField,
             sources,
             q.replace("\"version\":true,", ""), /*FIXME*/
             distinct,
-            nested,
-            isFiltered
+            identifier.nested,
+            isFiltered,
+            aggregation.function
           )
         })
       case _ => Seq.empty
@@ -156,15 +170,16 @@ object ElasticQuery {
 
 }
 
-case class ElasticCount(
-  agg: String,
+case class ElasticAggregation(
+  aggName: String,
   field: String,
   sourceField: String,
   sources: Seq[String],
   query: String,
   distinct: Boolean = false,
   nested: Boolean = false,
-  filtered: Boolean = false
+  filtered: Boolean = false,
+  aggType: AggregateFunction
 )
 
 case class ElasticSelect(

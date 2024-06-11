@@ -76,5 +76,5 @@ lazy val testKit = project.in(file("testkit"))
 lazy val root = project.in(file("."))
   .configs(IntegrationTest)
   .settings(Defaults.itSettings, Publish.noPublishSettings)
-  .aggregate(sql, client, testKit)
+  .aggregate(sql, client, persistence, testKit)
 

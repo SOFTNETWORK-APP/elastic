@@ -8,15 +8,8 @@ object SQLImplicits {
   import scala.language.implicitConversions
 
   implicit def queryToSQLCriteria(query: String): Option[SQLCriteria] = {
-    val sql: Option[SQLSelectQuery] = query
-    sql match {
-      case Some(q) =>
-        q.where match {
-          case Some(w) => w.criteria
-          case _       => None
-        }
-      case _ => None
-    }
+    val maybeQuery: Option[SQLSelectQuery] = query
+    maybeQuery.flatMap(_.where.flatMap(_.criteria))
   }
   implicit def queryToSQLQuery(query: String): Option[SQLSelectQuery] = {
     SQLParser(query) match {

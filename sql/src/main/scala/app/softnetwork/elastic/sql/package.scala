@@ -33,17 +33,30 @@ package object sql {
   case class SQLLimit(limit: Int) extends SQLExpr(s"limit $limit")
 
   case class SQLIdentifier(
-    identifier: String,
+    columnName: String,
     alias: Option[String] = None,
     distinct: Option[String] = None
-  ) extends SQLExpr(
-        if (alias.isDefined)
-          s"${distinct.getOrElse("")} ${alias.get}.$identifier".trim
-        else
-          s"${distinct.getOrElse("")} $identifier".trim
-      )
+  ) extends SQLExpr({
+        var parts: Seq[String] = columnName.split("\\.").toSeq
+        alias match {
+          case Some(a) => parts = a +: parts
+          case _       =>
+        }
+        s"${distinct.getOrElse("")} ${parts.mkString(".")}".trim
+      })
       with SQLSource {
-    lazy val nested: Boolean = identifier.contains('.') && !identifier.endsWith(".raw")
+    lazy val nested: Boolean = columnName.contains('.') && !columnName.endsWith(".raw")
+
+    lazy val nestedType: Option[String] = if (nested) Some(columnName.split('.').head) else None
+
+    def update(query: SQLSelectQuery): SQLIdentifier = {
+      val parts: Seq[String] = columnName.split("\\.").toSeq
+      if (query.aliases.contains(parts.head)) {
+        this.copy(alias = Some(parts.head), columnName = parts.tail.mkString("."))
+      } else {
+        this
+      }
+    }
   }
 
   abstract class SQLValue[+T](val value: T)(implicit ev$1: T => Ordered[T]) extends SQLToken {
@@ -186,51 +199,65 @@ package object sql {
 
   sealed trait SQLCriteria extends SQLToken {
     def operator: SQLOperator
+
+    def update(query: SQLSelectQuery): SQLCriteria
   }
 
   case class SQLExpression(
-    columnName: SQLIdentifier,
+    identifier: SQLIdentifier,
     operator: SQLExpressionOperator,
     value: SQLToken,
     not: Option[NOT.type] = None
   ) extends SQLCriteria {
-    override def sql = s"$columnName ${not.map(_ => "not ").getOrElse("")}${operator.sql} $value"
+    override def sql = s"$identifier ${not.map(_ => "not ").getOrElse("")}${operator.sql} $value"
+    override def update(query: SQLSelectQuery): SQLExpression =
+      this.copy(identifier = identifier.update(query))
   }
 
-  case class SQLIsNull(columnName: SQLIdentifier) extends SQLCriteria {
+  case class SQLIsNull(identifier: SQLIdentifier) extends SQLCriteria {
     override val operator: SQLOperator = IS_NULL
-    override def sql = s"$columnName ${operator.sql}"
+    override def sql = s"$identifier ${operator.sql}"
+    override def update(query: SQLSelectQuery): SQLIsNull =
+      this.copy(identifier = identifier.update(query))
   }
 
-  case class SQLIsNotNull(columnName: SQLIdentifier) extends SQLCriteria {
+  case class SQLIsNotNull(identifier: SQLIdentifier) extends SQLCriteria {
     override val operator: SQLOperator = IS_NOT_NULL
-    override def sql = s"$columnName ${operator.sql}"
+    override def sql = s"$identifier ${operator.sql}"
+    override def update(query: SQLSelectQuery): SQLIsNotNull =
+      this.copy(identifier = identifier.update(query))
   }
 
   case class SQLIn[R, +T <: SQLValue[R]](
-    columnName: SQLIdentifier,
+    identifier: SQLIdentifier,
     values: SQLValues[R, T],
     not: Option[NOT.type] = None
   ) extends SQLCriteria {
     override def sql =
-      s"$columnName ${not.map(_ => "not ").getOrElse("")}${operator.sql} ${values.sql}"
+      s"$identifier ${not.map(_ => "not ").getOrElse("")}${operator.sql} ${values.sql}"
     override def operator: SQLOperator = IN
+    override def update(query: SQLSelectQuery): SQLIn[R, T] =
+      this.copy(identifier = identifier.update(query))
   }
 
-  case class SQLBetween(columnName: SQLIdentifier, from: SQLLiteral, to: SQLLiteral)
+  case class SQLBetween(identifier: SQLIdentifier, from: SQLLiteral, to: SQLLiteral)
       extends SQLCriteria {
-    override def sql = s"$columnName ${operator.sql} ${from.sql} and ${to.sql}"
+    override def sql = s"$identifier ${operator.sql} ${from.sql} and ${to.sql}"
     override def operator: SQLOperator = BETWEEN
+    override def update(query: SQLSelectQuery): SQLBetween =
+      this.copy(identifier = identifier.update(query))
   }
 
   case class ElasticGeoDistance(
-    columnName: SQLIdentifier,
+    identifier: SQLIdentifier,
     distance: SQLLiteral,
     lat: SQLDouble,
     lon: SQLDouble
   ) extends SQLCriteria {
-    override def sql = s"${operator.sql}($columnName,(${lat.sql},${lon.sql})) <= ${distance.sql}"
+    override def sql = s"${operator.sql}($identifier,(${lat.sql},${lon.sql})) <= ${distance.sql}"
     override def operator: SQLOperator = SQLDistance
+    override def update(query: SQLSelectQuery): ElasticGeoDistance =
+      this.copy(identifier = identifier.update(query))
   }
 
   case class SQLPredicate(
@@ -251,6 +278,10 @@ package object sql {
     else leftCriteria.sql} ${operator.sql}${not
       .map(_ => " not")
       .getOrElse("")} ${if (rightParentheses) s"(${rightCriteria.sql})" else rightCriteria.sql}"
+    override def update(query: SQLSelectQuery): SQLPredicate = this.copy(
+      leftCriteria = leftCriteria.update(query),
+      rightCriteria = rightCriteria.update(query)
+    )
   }
 
   sealed trait ElasticOperator extends SQLOperator
@@ -263,11 +294,11 @@ package object sql {
     override def sql = s"${operator.sql}(${criteria.sql})"
     def _retrieveType(criteria: SQLCriteria): Option[String] = criteria match {
       case SQLPredicate(left, _, _, _) => _retrieveType(left)
-      case SQLBetween(col, _, _)       => Some(col.identifier.split("\\.").head)
-      case SQLExpression(col, _, _, _) => Some(col.identifier.split("\\.").head)
-      case SQLIn(col, _, _)            => Some(col.identifier.split("\\.").head)
-      case SQLIsNull(col)              => Some(col.identifier.split("\\.").head)
-      case SQLIsNotNull(col)           => Some(col.identifier.split("\\.").head)
+      case SQLBetween(col, _, _)       => Some(col.columnName.split("\\.").head)
+      case SQLExpression(col, _, _, _) => Some(col.columnName.split("\\.").head)
+      case SQLIn(col, _, _)            => Some(col.columnName.split("\\.").head)
+      case SQLIsNull(col)              => Some(col.columnName.split("\\.").head)
+      case SQLIsNotNull(col)           => Some(col.columnName.split("\\.").head)
       case relation: ElasticRelation   => relation.`type`
       case _                           => None
     }
@@ -275,13 +306,22 @@ package object sql {
   }
 
   case class ElasticNested(override val criteria: SQLCriteria)
-      extends ElasticRelation(criteria, NESTED)
+      extends ElasticRelation(criteria, NESTED) {
+    override def update(query: SQLSelectQuery): ElasticNested =
+      this.copy(criteria = criteria.update(query))
+  }
 
   case class ElasticChild(override val criteria: SQLCriteria)
-      extends ElasticRelation(criteria, CHILD)
+      extends ElasticRelation(criteria, CHILD) {
+    override def update(query: SQLSelectQuery): ElasticChild =
+      this.copy(criteria = criteria.update(query))
+  }
 
   case class ElasticParent(override val criteria: SQLCriteria)
-      extends ElasticRelation(criteria, PARENT)
+      extends ElasticRelation(criteria, PARENT) {
+    override def update(query: SQLSelectQuery): ElasticParent =
+      this.copy(criteria = criteria.update(query))
+  }
 
   sealed trait SQLDelimiter extends SQLToken
   trait StartDelimiter extends SQLDelimiter
@@ -300,8 +340,8 @@ package object sql {
         value.choose[T](values, Some(operator))
       case _ =>
         function match {
-          case Some(_: SQLMin.type) => Some(values.min)
-          case Some(_: SQLMax.type) => Some(values.max)
+          case Some(_: Min.type) => Some(values.min)
+          case Some(_: Max.type) => Some(values.max)
           // FIXME        case Some(_: SQLSum.type) => Some(values.sum)
           // FIXME        case Some(_: SQLAvg.type) => Some(values.sum / values.length  )
           case _ => values.headOption
@@ -327,41 +367,50 @@ package object sql {
   case class SQLAlias(alias: String) extends SQLExpr(s" as $alias")
 
   sealed trait SQLFunction extends SQLToken
-  case object SQLCount extends SQLExpr("count") with SQLFunction
-  case object SQLMin extends SQLExpr("min") with SQLFunction
-  case object SQLMax extends SQLExpr("max") with SQLFunction
-  case object SQLAvg extends SQLExpr("avg") with SQLFunction
-  case object SQLSum extends SQLExpr("sum") with SQLFunction
+  sealed trait AggregateFunction extends SQLFunction
+  case object Count extends SQLExpr("count") with AggregateFunction
+  case object Min extends SQLExpr("min") with AggregateFunction
+  case object Max extends SQLExpr("max") with AggregateFunction
+  case object Avg extends SQLExpr("avg") with AggregateFunction
+  case object Sum extends SQLExpr("sum") with AggregateFunction
   case object SQLDistance extends SQLExpr("distance") with SQLFunction with SQLOperator
 
   case class SQLField(
-    func: Option[SQLFunction] = None,
     identifier: SQLIdentifier,
     alias: Option[SQLAlias] = None
   ) extends SQLToken {
-    override def sql: String =
-      func match {
-        case Some(f) => s"${f.sql}(${identifier.sql})${asString(alias)}"
-        case _       => s"${identifier.sql}${asString(alias)}"
-      }
+    override def sql: String = s"${identifier.sql}${asString(alias)}"
+    def update(query: SQLSelectQuery): SQLField = this.copy(identifier = identifier.update(query))
   }
 
-  class SQLCountField(
+  class SQLAggregate(
+    val function: AggregateFunction,
     override val identifier: SQLIdentifier,
     override val alias: Option[SQLAlias] = None,
     val filter: Option[SQLFilter] = None
-  ) extends SQLField(Some(SQLCount), identifier, alias)
+  ) extends SQLField(identifier, alias) {
+    override def sql: String = s"${function.sql}(${identifier.sql})${asString(alias)}"
+    override def update(query: SQLSelectQuery): SQLAggregate =
+      new SQLAggregate(function, identifier.update(query), alias, filter.map(_.update(query)))
+  }
 
   case class SQLSelect(fields: Seq[SQLField] = Seq(SQLField(identifier = SQLIdentifier("*"))))
       extends SQLToken {
     override def sql: String = s"$SELECT ${fields.map(_.sql).mkString(",")}"
+    def update(query: SQLSelectQuery): SQLSelect = this.copy(fields = fields.map(_.update(query)))
   }
 
-  class SQLSelectCount(
-    val countFields: Seq[SQLCountField] = Seq(new SQLCountField(identifier = SQLIdentifier("*")))
-  ) extends SQLSelect(countFields)
+  class SQLSelectAggregates(
+    val aggregates: Seq[SQLAggregate]
+  ) extends SQLSelect(aggregates) {
+    override def update(query: SQLSelectQuery): SQLSelectAggregates = new SQLSelectAggregates(
+      aggregates.map(_.update(query))
+    )
+  }
 
-  sealed trait SQLSource extends SQLToken
+  sealed trait SQLSource extends SQLToken {
+    def alias: Option[String]
+  }
 
   case class SQLTable(source: SQLSource, alias: Option[SQLAlias] = None) extends SQLToken {
     override def sql: String = s"$source${asString(alias)}"
@@ -369,6 +418,7 @@ package object sql {
 
   case class SQLFrom(tables: Seq[SQLTable]) extends SQLToken {
     override def sql: String = s" $FROM ${tables.map(_.sql).mkString(",")}"
+    lazy val aliases: Seq[String] = tables.flatMap((table: SQLTable) => table.alias).map(_.alias)
   }
 
   case class SQLWhere(criteria: Option[SQLCriteria]) extends SQLToken {
@@ -376,6 +426,8 @@ package object sql {
       case Some(c) => s" $WHERE ${c.sql}"
       case _       => ""
     }
+    def update(query: SQLSelectQuery): SQLWhere =
+      this.copy(criteria = criteria.map(_.update(query)))
   }
 
   case class SQLFilter(criteria: Option[SQLCriteria]) extends SQLToken {
@@ -383,6 +435,8 @@ package object sql {
       case Some(c) => s" $FILTER($c)"
       case _       => ""
     }
+    def update(query: SQLSelectQuery): SQLFilter =
+      this.copy(criteria = criteria.map(_.update(query)))
   }
 
   case class SQLSelectQuery(
@@ -392,14 +446,24 @@ package object sql {
     limit: Option[SQLLimit] = None
   ) extends SQLToken {
     override def sql: String = s"${select.sql}${from.sql}${asString(where)}${asString(limit)}"
+    lazy val aliases: Seq[String] = from.aliases
+    def update(): SQLSelectQuery =
+      this.copy(select = select.update(this), where = where.map(_.update(this)))
   }
 
-  class SQLCountQuery(
-    val selectCount: SQLSelectCount = new SQLSelectCount(),
+  class SQLSelectAggregatesQuery(
+    val selectAggregates: SQLSelectAggregates,
     from: SQLFrom,
     where: Option[SQLWhere],
     limit: Option[SQLLimit] = None
-  ) extends SQLSelectQuery(selectCount, from, where)
+  ) extends SQLSelectQuery(selectAggregates, from, where, limit) {
+    override def update(): SQLSelectAggregatesQuery = new SQLSelectAggregatesQuery(
+      selectAggregates.update(this),
+      from,
+      where.map(_.update(this)),
+      limit
+    )
+  }
 
   case class SQLQuery(query: String)
 

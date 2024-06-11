@@ -128,11 +128,11 @@ trait JestCountApi extends CountApi with JestClientCompanion {
   override def countAsync(
     sqlQuery: SQLQuery
   )(implicit ec: ExecutionContext): Future[_root_.scala.collection.Seq[CountResponse]] = {
-    val futures = for (elasticCount <- ElasticQuery.count(sqlQuery)) yield {
+    val futures = for (elasticCount <- ElasticQuery.aggregate(sqlQuery)) yield {
       val promise: Promise[CountResponse] = Promise()
       val _field = elasticCount.field
       val _sourceField = elasticCount.sourceField
-      val _agg = elasticCount.agg
+      val _agg = elasticCount.aggName
       val _query = elasticCount.query
       val _sources = elasticCount.sources
       _sourceField match {
