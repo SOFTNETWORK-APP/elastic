@@ -1,5 +1,6 @@
 package app.softnetwork.elastic.sql
 
+import com.sksamuel.elastic4s.ElasticApi.matchAllQuery
 import com.sksamuel.elastic4s.http.search.SearchBodyBuilderFn
 import com.sksamuel.elastic4s.searches.SearchRequest
 import com.sksamuel.elastic4s.searches.queries.Query
@@ -8,37 +9,41 @@ import org.scalatest.matchers.should.Matchers
 
 /** Created by smanciot on 13/04/17.
   */
-class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
+class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
 
   import Queries._
 
   import scala.language.implicitConversions
 
-  def query2String(result: Query): String = {
-    SearchBodyBuilderFn(SearchRequest("*") query result).string()
+  def filter(sql: String): String = {
+    import SQLImplicits._
+    val criteria: Option[SQLCriteria] = sql
+    val result = SearchBodyBuilderFn(
+      SearchRequest("*") query criteria.map(_.filter(None).query()).getOrElse(matchAllQuery())
+    ).string()
+    println(result)
+    result
   }
 
-  "ElasticFilters" should "filter numerical eq" in {
-    val result = ElasticFilters.filter(numericalEq)
-    query2String(result) shouldBe """{
+  "SQLCriteria" should "filter numerical eq" in {
+    filter(numericalEq) shouldBe """{
 
         |"query":{
-        |    "term" : {
+        |    "bool":{"filter":[{"term" : {
         |      "identifier" : {
         |        "value" : "1.0"
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter numerical ne" in {
-    val result = ElasticFilters.filter(numericalNe)
-    query2String(result) shouldBe """{
+    filter(numericalNe) shouldBe """{
 
         |"query":{
         |   "bool":{
-        |       "must_not":[
+        |       "filter":[{"bool":{"must_not":[
         |         {
         |           "term":{
         |             "identifier":{
@@ -49,86 +54,81 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |       ]
         |    }
         | }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter numerical lt" in {
-    val result = ElasticFilters.filter(numericalLt)
-    query2String(result) shouldBe """{
+    filter(numericalLt) shouldBe """{
 
         |"query":{
-        |    "range" : {
+        |    "bool":{"filter":[{"range" : {
         |      "identifier" : {
         |        "lt" : "1"
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter numerical le" in {
-    val result = ElasticFilters.filter(numericalLe)
-    query2String(result) shouldBe """{
+    filter(numericalLe) shouldBe """{
 
         |"query":{
-        |    "range" : {
+        |    "bool":{"filter":[{"range" : {
         |      "identifier" : {
         |        "lte" : "1"
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter numerical gt" in {
-    val result = ElasticFilters.filter(numericalGt)
-    query2String(result) shouldBe """{
+    filter(numericalGt)
+    filter(numericalGt) shouldBe """{
 
         |"query":{
-        |    "range" : {
+        |    "bool":{"filter":[{"range" : {
         |      "identifier" : {
         |        "gt" : "1"
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter numerical ge" in {
-    val result = ElasticFilters.filter(numericalGe)
-    query2String(result) shouldBe """{
+    filter(numericalGe) shouldBe """{
 
         |"query":{
-        |    "range" : {
+        |    "bool":{"filter":[{"range" : {
         |      "identifier" : {
         |        "gte" : "1"
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter literal eq" in {
-    val result = ElasticFilters.filter(literalEq)
-    query2String(result) shouldBe """{
+    filter(literalEq) shouldBe """{
 
         |"query":{
-        |    "term" : {
+        |    "bool":{"filter":[{"term" : {
         |      "identifier" : {
         |        "value" : "un"
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter literal ne" in {
-    val result = ElasticFilters.filter(literalNe)
-    query2String(result) shouldBe """{
+    filter(literalNe) shouldBe """{
 
         |"query":{
         |    "bool" : {
-        |      "must_not" : [
+        |      "filter":[{"bool":{"must_not" : [
         |        {
         |          "term" : {
         |            "identifier" : {
@@ -139,30 +139,27 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter literal like" in {
-    val result = ElasticFilters.filter(literalLike)
-    query2String(result) shouldBe """{
+    filter(literalLike) shouldBe """{
 
         |"query":{
-        |    "regexp" : {
+        |    "bool":{"filter":[{"regexp" : {
         |      "identifier" : {
         |        "value" : ".*?un.*?"
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter literal not like" in {
-    val result = ElasticFilters.filter(literalNotLike)
-    query2String(result) shouldBe
-    """{
+    filter(literalNotLike) shouldBe """{
         |"query":{
         |    "bool": {
-        |      "must_not": [{
+        |      "filter":[{"bool":{"must_not": [{
         |        "regexp": {
         |          "identifier": {
         |            "value": ".*?un.*?"
@@ -171,30 +168,28 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      }]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter between" in {
-    val result = ElasticFilters.filter(betweenExpression)
-    query2String(result) shouldBe """{
+    filter(betweenExpression) shouldBe """{
 
         |"query":{
-        |    "range" : {
+        |    "bool":{"filter":[{"range" : {
         |      "identifier" : {
         |        "gte" : "1",
         |        "lte" : "2"
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter and predicate" in {
-    val result = ElasticFilters.filter(andPredicate)
-    query2String(result) shouldBe """{
+    filter(andPredicate) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "filter" : [
         |        {
         |          "term" : {
@@ -213,15 +208,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter or predicate" in {
-    val result = ElasticFilters.filter(orPredicate)
-    query2String(result) shouldBe """{
+    filter(orPredicate) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "should" : [
         |        {
         |          "term" : {
@@ -240,15 +234,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter left predicate with criteria" in {
-    val result = ElasticFilters.filter(leftPredicate)
-    query2String(result) shouldBe """{
+    filter(leftPredicate) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "should" : [
         |        {
         |          "bool" : {
@@ -280,15 +273,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter right predicate with criteria" in {
-    val result = ElasticFilters.filter(rightPredicate)
-    query2String(result) shouldBe """{
+    filter(rightPredicate) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "filter" : [
         |        {
         |          "term" : {
@@ -320,15 +312,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter multiple predicates" in {
-    val result = ElasticFilters.filter(predicates)
-    query2String(result) shouldBe """{
+    filter(predicates) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "should" : [
         |        {
         |          "bool" : {
@@ -373,15 +364,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter in literal expression" in {
-    val result = ElasticFilters.filter(inLiteralExpression)
-    query2String(result) shouldBe """{
+    filter(inLiteralExpression) shouldBe """{
 
         |"query":{
-        |    "terms" : {
+        |    "bool":{"filter":[{"terms" : {
         |      "identifier" : [
         |        "val1",
         |        "val2",
@@ -389,15 +379,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter in numerical expression with Int values" in {
-    val result = ElasticFilters.filter(inNumericalExpressionWithIntValues)
-    query2String(result) shouldBe """{
+    filter(inNumericalExpressionWithIntValues) shouldBe """{
 
         |"query":{
-        |    "terms" : {
+        |    "bool":{"filter":[{"terms" : {
         |      "identifier" : [
         |        1,
         |        2,
@@ -405,15 +394,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter in numerical expression with Double values" in {
-    val result = ElasticFilters.filter(inNumericalExpressionWithDoubleValues)
-    query2String(result) shouldBe """{
+    filter(inNumericalExpressionWithDoubleValues) shouldBe """{
 
         |"query":{
-        |    "terms" : {
+        |    "bool":{"filter":[{"terms" : {
         |      "identifier" : [
         |        1.0,
         |        2.1,
@@ -421,15 +409,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter nested predicate" in {
-    val result = ElasticFilters.filter(nestedPredicate)
-    query2String(result) shouldBe """{
+    filter(nestedPredicate) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "filter" : [
         |        {
         |          "term" : {
@@ -467,15 +454,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter nested criteria" in {
-    val result = ElasticFilters.filter(nestedCriteria)
-    query2String(result) shouldBe """{
+    filter(nestedCriteria) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "filter" : [
         |        {
         |          "term" : {
@@ -500,15 +486,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter child predicate" in {
-    val result = ElasticFilters.filter(childPredicate)
-    query2String(result) shouldBe """{
+    filter(childPredicate) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "filter" : [
         |        {
         |          "term" : {
@@ -546,15 +531,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter child criteria" in {
-    val result = ElasticFilters.filter(childCriteria)
-    query2String(result) shouldBe """{
+    filter(childCriteria) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |   "bool":{"filter":[{ "bool" : {
         |      "filter" : [
         |        {
         |          "term" : {
@@ -579,15 +563,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter parent predicate" in {
-    val result = ElasticFilters.filter(parentPredicate)
-    query2String(result) shouldBe """{
+    filter(parentPredicate) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "filter" : [
         |        {
         |          "term" : {
@@ -624,15 +607,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter parent criteria" in {
-    val result = ElasticFilters.filter(parentCriteria)
-    query2String(result) shouldBe """{
+    filter(parentCriteria) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "filter" : [
         |        {
         |          "term" : {
@@ -656,15 +638,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter nested with between" in {
-    val result = ElasticFilters.filter(nestedWithBetween)
-    query2String(result) shouldBe """{
+    filter(nestedWithBetween) shouldBe """{
 
         |"query":{
-        |    "nested" : {
+        |    "bool":{"filter":[{"nested" : {
         |      "path" : "ciblage",
         |      "query" : {
         |        "bool" : {
@@ -690,29 +671,27 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      "inner_hits":{"name":"ciblage"}
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter boolean eq" in {
-    val result = ElasticFilters.filter(boolEq)
-    query2String(result) shouldBe """{
+    filter(boolEq) shouldBe """{
 
         |"query":{
-        |    "term" : {
+        |    "bool":{"filter":[{"term" : {
         |      "identifier" : {
         |        "value" : true
         |      }
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter boolean ne" in {
-    val result = ElasticFilters.filter(boolNe)
-    query2String(result) shouldBe """{
+    filter(boolNe) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "must_not" : [
         |        {
         |          "term" : {
@@ -724,15 +703,14 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter is null" in {
-    val result = ElasticFilters.filter(isNull)
-    query2String(result) shouldBe """{
+    filter(isNull) shouldBe """{
 
         |"query":{
-        |    "bool" : {
+        |    "bool":{"filter":[{"bool" : {
         |      "must_not" : [
         |        {
         |          "exists" : {
@@ -742,44 +720,108 @@ class ElasticFiltersSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter is not null" in {
-    val result = ElasticFilters.filter(isNotNull)
-    query2String(result) shouldBe """{
+    filter(isNotNull) shouldBe """{
 
         |"query":{
-        |    "exists" : {
+        |    "bool":{"filter":[{"exists" : {
         |      "field" : "identifier"
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
-  it should "filter geo distance criteria" in { //FIXME implements UNNEST
-    val result = ElasticFilters.filter(geoDistanceCriteria)
-    query2String(result) shouldBe
+  it should "filter geo distance criteria" in {
+    filter(geoDistanceCriteria) shouldBe
     """{
 
-        |"query":{
-        |    "nested": {
-        |        "path": "profile",
-        |        "query": {
-        |            "geo_distance": {
-        |                "distance": "5km",
-        |                "profile.location": [
-        |                    40.0,
-        |                    -70.0
-        |                ]
-        |            }
-        |        },
-        |        "inner_hits": {
-        |            "name": "profile"
-        |        }
+        |"query": {
+        |    "bool":{"filter":[{"geo_distance": {
+        |      "distance": "5km",
+        |      "profile.location": [
+        |        40.0,
+        |        -70.0
+        |      ]
         |    }
         |  }
-        |}""".stripMargin.replaceAll("\\s", "")
+        |]}}}""".stripMargin.replaceAll("\\s", "")
+  }
+
+  it should "filter complex queries" in {
+    val query =
+      """select * from Table
+        |where (identifier is not null and identifier = 1) or
+        |(
+        | (identifier is null or identifier2 > 2)
+        | and (identifier3 = 3)
+        |)""".stripMargin
+    filter(query) shouldBe """{
+
+        |"query":{
+        |    "bool":{"filter":[{"bool" : {
+        |      "should" : [
+        |        {
+        |          "bool" : {
+        |            "filter" : [
+        |              {
+        |                "exists" : {
+        |                  "field" : "identifier"
+        |                }
+        |              },
+        |              {
+        |                "term" : {
+        |                  "identifier" : {
+        |                    "value" : "1"
+        |                  }
+        |                }
+        |              }
+        |            ]
+        |          }
+        |        },
+        |        {
+        |          "bool" : {
+        |            "filter" : [
+        |              {
+        |                "bool" : {
+        |                  "should" : [
+        |                    {
+        |                      "bool" : {
+        |                        "must_not" : [
+        |                          {
+        |                            "exists" : {
+        |                              "field" : "identifier"
+        |                            }
+        |                          }
+        |                        ]
+        |                      }
+        |                    },
+        |                    {
+        |                      "range" : {
+        |                        "identifier2" : {
+        |                          "gt" : "2"
+        |                        }
+        |                      }
+        |                    }
+        |                  ]
+        |                }
+        |              },
+        |              {
+        |                "term" : {
+        |                  "identifier3" : {
+        |                    "value" : "3"
+        |                  }
+        |                }
+        |              }
+        |            ]
+        |          }
+        |        }
+        |      ]
+        |    }
+        |  }
+        |]}}}""".stripMargin.replaceAll("\\s", "")
   }
 
 }

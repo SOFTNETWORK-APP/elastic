@@ -1,9 +1,10 @@
 package app.softnetwork.elastic
 
+import com.sksamuel.elastic4s.ElasticApi._
+import com.sksamuel.elastic4s.searches.queries.Query
+
 import java.util.regex.Pattern
-
 import scala.reflect.runtime.universe._
-
 import scala.util.Try
 
 /** Created by smanciot on 27/06/2018.
@@ -11,6 +12,8 @@ import scala.util.Try
 package object sql {
 
   import scala.language.implicitConversions
+
+  import SQLImplicits._
 
   implicit def asString(token: Option[_ <: SQLToken]): String = token match {
     case Some(t) => t.sql
@@ -35,7 +38,8 @@ package object sql {
   case class SQLIdentifier(
     columnName: String,
     alias: Option[String] = None,
-    distinct: Option[String] = None
+    distinct: Option[String] = None,
+    nested: Boolean = false
   ) extends SQLExpr({
         var parts: Seq[String] = columnName.split("\\.").toSeq
         alias match {
@@ -45,14 +49,27 @@ package object sql {
         s"${distinct.getOrElse("")} ${parts.mkString(".")}".trim
       })
       with SQLSource {
-    lazy val nested: Boolean = columnName.contains('.') && !columnName.endsWith(".raw")
 
     lazy val nestedType: Option[String] = if (nested) Some(columnName.split('.').head) else None
+
+    lazy val innerHitsName: Option[String] = if (nested) alias else None
 
     def update(query: SQLSelectQuery): SQLIdentifier = {
       val parts: Seq[String] = columnName.split("\\.").toSeq
       if (query.aliases.contains(parts.head)) {
-        this.copy(alias = Some(parts.head), columnName = parts.tail.mkString("."))
+        query.unnests.find(_._1 == parts.head) match {
+          case Some(tuple) =>
+            this.copy(
+              alias = Some(parts.head),
+              columnName = s"${tuple._2}.${parts.tail.mkString(".")}",
+              nested = true
+            )
+          case _ =>
+            this.copy(
+              alias = Some(parts.head),
+              columnName = parts.tail.mkString(".")
+            )
+        }
       } else {
         this
       }
@@ -179,73 +196,334 @@ package object sql {
 
   sealed trait SQLExpressionOperator extends SQLOperator
 
-  case object EQ extends SQLExpr("=") with SQLExpressionOperator
-  case object GE extends SQLExpr(">=") with SQLExpressionOperator
-  case object GT extends SQLExpr(">") with SQLExpressionOperator
-  case object IN extends SQLExpr("in") with SQLExpressionOperator
-  case object LE extends SQLExpr("<=") with SQLExpressionOperator
-  case object LIKE extends SQLExpr("like") with SQLExpressionOperator
-  case object LT extends SQLExpr("<") with SQLExpressionOperator
-  case object NE extends SQLExpr("<>") with SQLExpressionOperator
-  case object BETWEEN extends SQLExpr("between") with SQLExpressionOperator
-  case object IS_NULL extends SQLExpr("is null") with SQLExpressionOperator
-  case object IS_NOT_NULL extends SQLExpr("is not null") with SQLExpressionOperator
+  sealed trait SQLComparisonOperator extends SQLExpressionOperator
 
-  sealed trait SQLPredicateOperator extends SQLOperator
+  case object EQ extends SQLExpr("=") with SQLComparisonOperator
+  case object NE extends SQLExpr("<>") with SQLComparisonOperator
+  case object GE extends SQLExpr(">=") with SQLComparisonOperator
+  case object GT extends SQLExpr(">") with SQLComparisonOperator
+  case object LE extends SQLExpr("<=") with SQLComparisonOperator
+  case object LT extends SQLExpr("<") with SQLComparisonOperator
+
+  sealed trait SQLLogicalOperator extends SQLExpressionOperator
+
+  case object IN extends SQLExpr("in") with SQLLogicalOperator
+  case object LIKE extends SQLExpr("like") with SQLLogicalOperator
+  case object BETWEEN extends SQLExpr("between") with SQLLogicalOperator
+  case object IS_NULL extends SQLExpr("is null") with SQLLogicalOperator
+  case object IS_NOT_NULL extends SQLExpr("is not null") with SQLLogicalOperator
+
+  sealed trait SQLPredicateOperator extends SQLLogicalOperator
 
   case object AND extends SQLPredicateOperator { override val sql: String = "and" }
   case object OR extends SQLPredicateOperator { override val sql: String = "or" }
   case object NOT extends SQLPredicateOperator { override val sql: String = "not" }
 
+  sealed trait ElasticFilter {
+    def maybeIdentifier: Option[SQLIdentifier] = None
+    def query(innerHitsNames: Set[String] = Set.empty): Query
+  }
+
+  case class ElasticBoolQuery(
+    innerFilters: Seq[ElasticFilter] = Nil,
+    mustFilters: Seq[ElasticFilter] = Nil,
+    notFilters: Seq[ElasticFilter] = Nil,
+    shouldFilters: Seq[ElasticFilter] = Nil
+  ) extends ElasticFilter {
+    def filter(filter: ElasticFilter): ElasticBoolQuery =
+      this.copy(innerFilters = filter +: innerFilters)
+    def must(filter: ElasticFilter): ElasticBoolQuery =
+      this.copy(mustFilters = filter +: mustFilters)
+    def not(filter: ElasticFilter): ElasticBoolQuery = this.copy(notFilters = filter +: notFilters)
+    def should(filter: ElasticFilter): ElasticBoolQuery =
+      this.copy(shouldFilters = filter +: shouldFilters)
+
+    def query(innerHitsNames: Set[String] = Set.empty): Query = {
+      import com.sksamuel.elastic4s.ElasticApi._
+      bool(
+        mustFilters.map(_.query(innerHitsNames)),
+        shouldFilters.map(_.query(innerHitsNames)),
+        notFilters.map(_.query(innerHitsNames))
+      )
+        .filter(innerFilters.map(_.query(innerHitsNames)))
+    }
+
+  }
+
   sealed trait SQLCriteria extends SQLToken {
     def operator: SQLOperator
 
+    def nested: Boolean = false
+
     def update(query: SQLSelectQuery): SQLCriteria
+
+    def asFilter(): ElasticFilter = ElasticBoolQuery()
+
+    def filter(currentQuery: Option[ElasticBoolQuery]): ElasticBoolQuery = currentQuery match {
+      case Some(q) => q.filter(this.asFilter())
+      case _       => ElasticBoolQuery().filter(this.asFilter())
+    }
+
+    def must(currentQuery: Option[ElasticBoolQuery]): ElasticBoolQuery = currentQuery match {
+      case Some(q) => q.must(this.asFilter())
+      case _       => ElasticBoolQuery().must(this.asFilter())
+    }
+
+    def _not_(currentQuery: Option[ElasticBoolQuery]): ElasticBoolQuery = currentQuery match {
+      case Some(q) => q.not(this.asFilter())
+      case _       => ElasticBoolQuery().not(this.asFilter())
+    }
+
+    def should(currentQuery: Option[ElasticBoolQuery]): ElasticBoolQuery = currentQuery match {
+      case Some(q) => q.should(this.asFilter())
+      case _       => ElasticBoolQuery().should(this.asFilter())
+    }
+  }
+
+  sealed trait SQLCriteriaWithIdentifier extends SQLCriteria {
+    def identifier: SQLIdentifier
+    override def nested: Boolean = identifier.nested
   }
 
   case class SQLExpression(
     identifier: SQLIdentifier,
     operator: SQLExpressionOperator,
     value: SQLToken,
-    not: Option[NOT.type] = None
-  ) extends SQLCriteria {
-    override def sql = s"$identifier ${not.map(_ => "not ").getOrElse("")}${operator.sql} $value"
-    override def update(query: SQLSelectQuery): SQLExpression =
-      this.copy(identifier = identifier.update(query))
+    maybeNot: Option[NOT.type] = None
+  ) extends SQLCriteriaWithIdentifier
+      with ElasticFilter {
+    override def sql =
+      s"$identifier ${maybeNot.map(_ => "not ").getOrElse("")}${operator.sql} $value"
+    override def update(query: SQLSelectQuery): SQLCriteria = {
+      val updated = this.copy(identifier = identifier.update(query))
+      if (updated.nested) {
+        ElasticNested(updated)
+      } else
+        updated
+    }
+
+    override def asFilter(): ElasticFilter = this
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query = {
+      value match {
+        case n: SQLNumeric[Any] @unchecked =>
+          operator match {
+            case _: GE.type =>
+              maybeNot match {
+                case Some(_) =>
+                  rangeQuery(identifier.columnName) lt n.sql
+                case _ =>
+                  rangeQuery(identifier.columnName) gte n.sql
+              }
+            case _: GT.type =>
+              maybeNot match {
+                case Some(_) =>
+                  rangeQuery(identifier.columnName) lte n.sql
+                case _ =>
+                  rangeQuery(identifier.columnName) gt n.sql
+              }
+            case _: LE.type =>
+              maybeNot match {
+                case Some(_) =>
+                  rangeQuery(identifier.columnName) gt n.sql
+                case _ =>
+                  rangeQuery(identifier.columnName) lte n.sql
+              }
+            case _: LT.type =>
+              maybeNot match {
+                case Some(_) =>
+                  rangeQuery(identifier.columnName) gte n.sql
+                case _ =>
+                  rangeQuery(identifier.columnName) lt n.sql
+              }
+            case _: EQ.type =>
+              maybeNot match {
+                case Some(_) =>
+                  not(termQuery(identifier.columnName, n.sql))
+                case _ =>
+                  termQuery(identifier.columnName, n.sql)
+              }
+            case _: NE.type =>
+              maybeNot match {
+                case Some(_) =>
+                  termQuery(identifier.columnName, n.sql)
+                case _ =>
+                  not(termQuery(identifier.columnName, n.sql))
+              }
+            case _ => matchAllQuery
+          }
+        case l: SQLLiteral =>
+          operator match {
+            case _: LIKE.type =>
+              maybeNot match {
+                case Some(_) =>
+                  not(regexQuery(identifier.columnName, toRegex(l.value)))
+                case _ =>
+                  regexQuery(identifier.columnName, toRegex(l.value))
+              }
+            case _: GE.type =>
+              maybeNot match {
+                case Some(_) =>
+                  rangeQuery(identifier.columnName) lt l.value
+                case _ =>
+                  rangeQuery(identifier.columnName) gte l.value
+              }
+            case _: GT.type =>
+              maybeNot match {
+                case Some(_) =>
+                  rangeQuery(identifier.columnName) lte l.value
+                case _ =>
+                  rangeQuery(identifier.columnName) gt l.value
+              }
+            case _: LE.type =>
+              maybeNot match {
+                case Some(_) =>
+                  rangeQuery(identifier.columnName) gt l.value
+                case _ =>
+                  rangeQuery(identifier.columnName) lte l.value
+              }
+            case _: LT.type =>
+              maybeNot match {
+                case Some(_) =>
+                  rangeQuery(identifier.columnName) gte l.value
+                case _ =>
+                  rangeQuery(identifier.columnName) lt l.value
+              }
+            case _: EQ.type =>
+              maybeNot match {
+                case Some(_) =>
+                  not(termQuery(identifier.columnName, l.value))
+                case _ =>
+                  termQuery(identifier.columnName, l.value)
+              }
+            case _: NE.type =>
+              maybeNot match {
+                case Some(_) =>
+                  termQuery(identifier.columnName, l.value)
+                case _ =>
+                  not(termQuery(identifier.columnName, l.value))
+              }
+            case _ => matchAllQuery
+          }
+        case b: SQLBoolean =>
+          operator match {
+            case _: EQ.type =>
+              termQuery(identifier.columnName, b.value)
+            case _: NE.type =>
+              not(termQuery(identifier.columnName, b.value))
+            case _ => matchAllQuery
+          }
+        case _ => matchAllQuery
+      }
+    }
+
+    override def maybeIdentifier: Option[SQLIdentifier] = Some(identifier)
   }
 
-  case class SQLIsNull(identifier: SQLIdentifier) extends SQLCriteria {
+  case class SQLIsNull(identifier: SQLIdentifier)
+      extends SQLCriteriaWithIdentifier
+      with ElasticFilter {
     override val operator: SQLOperator = IS_NULL
     override def sql = s"$identifier ${operator.sql}"
-    override def update(query: SQLSelectQuery): SQLIsNull =
-      this.copy(identifier = identifier.update(query))
+    override def update(query: SQLSelectQuery): SQLCriteria = {
+      val updated = this.copy(identifier = identifier.update(query))
+      if (updated.nested) {
+        ElasticNested(updated)
+      } else
+        updated
+    }
+
+    override def asFilter(): ElasticFilter = this
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query = {
+      not(existsQuery(identifier.columnName))
+    }
+
+    override def maybeIdentifier: Option[SQLIdentifier] = Some(identifier)
   }
 
-  case class SQLIsNotNull(identifier: SQLIdentifier) extends SQLCriteria {
+  case class SQLIsNotNull(identifier: SQLIdentifier)
+      extends SQLCriteriaWithIdentifier
+      with ElasticFilter {
     override val operator: SQLOperator = IS_NOT_NULL
     override def sql = s"$identifier ${operator.sql}"
-    override def update(query: SQLSelectQuery): SQLIsNotNull =
-      this.copy(identifier = identifier.update(query))
+    override def update(query: SQLSelectQuery): SQLCriteria = {
+      val updated = this.copy(identifier = identifier.update(query))
+      if (updated.nested) {
+        ElasticNested(updated)
+      } else
+        updated
+    }
+
+    override def asFilter(): ElasticFilter = this
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query = {
+      existsQuery(identifier.columnName)
+    }
+
+    override def maybeIdentifier: Option[SQLIdentifier] = Some(identifier)
   }
 
   case class SQLIn[R, +T <: SQLValue[R]](
     identifier: SQLIdentifier,
     values: SQLValues[R, T],
-    not: Option[NOT.type] = None
-  ) extends SQLCriteria {
+    maybeNot: Option[NOT.type] = None
+  ) extends SQLCriteriaWithIdentifier
+      with ElasticFilter {
     override def sql =
-      s"$identifier ${not.map(_ => "not ").getOrElse("")}${operator.sql} ${values.sql}"
+      s"$identifier ${maybeNot.map(_ => "not ").getOrElse("")}${operator.sql} ${values.sql}"
     override def operator: SQLOperator = IN
-    override def update(query: SQLSelectQuery): SQLIn[R, T] =
-      this.copy(identifier = identifier.update(query))
+    override def update(query: SQLSelectQuery): SQLCriteria = {
+      val updated = this.copy(identifier = identifier.update(query))
+      if (updated.nested) {
+        ElasticNested(updated)
+      } else
+        updated
+    }
+
+    override def asFilter(): ElasticFilter = this
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query = {
+      val _values: Seq[Any] = values.innerValues
+      val t =
+        _values.headOption match {
+          case Some(_: Double) =>
+            termsQuery(identifier.columnName, _values.asInstanceOf[Seq[Double]])
+          case Some(_: Integer) =>
+            termsQuery(identifier.columnName, _values.asInstanceOf[Seq[Integer]])
+          case Some(_: Long) =>
+            termsQuery(identifier.columnName, _values.asInstanceOf[Seq[Long]])
+          case _ => termsQuery(identifier.columnName, _values.map(_.toString))
+        }
+      maybeNot match {
+        case Some(_) => not(t)
+        case _       => t
+      }
+    }
+
+    override def maybeIdentifier: Option[SQLIdentifier] = Some(identifier)
   }
 
   case class SQLBetween(identifier: SQLIdentifier, from: SQLLiteral, to: SQLLiteral)
-      extends SQLCriteria {
+      extends SQLCriteriaWithIdentifier
+      with ElasticFilter {
     override def sql = s"$identifier ${operator.sql} ${from.sql} and ${to.sql}"
     override def operator: SQLOperator = BETWEEN
-    override def update(query: SQLSelectQuery): SQLBetween =
-      this.copy(identifier = identifier.update(query))
+    override def update(query: SQLSelectQuery): SQLCriteria = {
+      val updated = this.copy(identifier = identifier.update(query))
+      if (updated.nested) {
+        ElasticNested(updated)
+      } else
+        updated
+    }
+
+    override def asFilter(): ElasticFilter = this
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query = {
+      rangeQuery(identifier.columnName) gte from.value lte to.value
+    }
+
+    override def maybeIdentifier: Option[SQLIdentifier] = Some(identifier)
   }
 
   case class ElasticGeoDistance(
@@ -253,11 +531,20 @@ package object sql {
     distance: SQLLiteral,
     lat: SQLDouble,
     lon: SQLDouble
-  ) extends SQLCriteria {
+  ) extends SQLCriteriaWithIdentifier
+      with ElasticFilter {
     override def sql = s"${operator.sql}($identifier,(${lat.sql},${lon.sql})) <= ${distance.sql}"
     override def operator: SQLOperator = SQLDistance
     override def update(query: SQLSelectQuery): ElasticGeoDistance =
       this.copy(identifier = identifier.update(query))
+
+    override def asFilter(): ElasticFilter = this
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query = {
+      geoDistanceQuery(identifier.columnName).point(lat.value, lon.value) distance distance.value
+    }
+
+    override def maybeIdentifier: Option[SQLIdentifier] = Some(identifier)
   }
 
   case class SQLPredicate(
@@ -278,10 +565,40 @@ package object sql {
     else leftCriteria.sql} ${operator.sql}${not
       .map(_ => " not")
       .getOrElse("")} ${if (rightParentheses) s"(${rightCriteria.sql})" else rightCriteria.sql}"
-    override def update(query: SQLSelectQuery): SQLPredicate = this.copy(
-      leftCriteria = leftCriteria.update(query),
-      rightCriteria = rightCriteria.update(query)
-    )
+    override def update(query: SQLSelectQuery): SQLCriteria = {
+      val updatedPredicate = this.copy(
+        leftCriteria = leftCriteria.update(query),
+        rightCriteria = rightCriteria.update(query)
+      )
+      if (updatedPredicate.nested) {
+        ElasticNested(updatedPredicate)
+      } else
+        updatedPredicate
+    }
+
+    private[this] val currentQuery: Option[ElasticBoolQuery] = Option(ElasticBoolQuery())
+
+    override def asFilter(): ElasticFilter = {
+      operator match {
+        case AND => leftCriteria.filter(Option(handleRightQuery(currentQuery)))
+        case OR  => leftCriteria.should(Option(handleRightQuery(currentQuery)))
+        case NOT => leftCriteria._not_(Option(handleRightQuery(currentQuery)))
+      }
+    }
+
+    private[this] def handleRightQuery(currentQuery: Option[ElasticBoolQuery]): ElasticBoolQuery = {
+      not match {
+        case Some(_) => rightCriteria._not_(currentQuery)
+        case _ =>
+          operator match {
+            case AND => rightCriteria.filter(currentQuery)
+            case OR  => rightCriteria.should(currentQuery)
+            case NOT => rightCriteria._not_(currentQuery)
+          }
+      }
+    }
+
+    override def nested: Boolean = leftCriteria.nested && rightCriteria.nested
   }
 
   sealed trait ElasticOperator extends SQLOperator
@@ -290,37 +607,73 @@ package object sql {
   case object PARENT extends SQLExpr("parent") with ElasticOperator
 
   sealed abstract class ElasticRelation(val criteria: SQLCriteria, val operator: ElasticOperator)
-      extends SQLCriteria {
+      extends SQLCriteria
+      with ElasticFilter {
     override def sql = s"${operator.sql}(${criteria.sql})"
-    def _retrieveType(criteria: SQLCriteria): Option[String] = criteria match {
-      case SQLPredicate(left, _, _, _) => _retrieveType(left)
-      case SQLBetween(col, _, _)       => Some(col.columnName.split("\\.").head)
-      case SQLExpression(col, _, _, _) => Some(col.columnName.split("\\.").head)
-      case SQLIn(col, _, _)            => Some(col.columnName.split("\\.").head)
-      case SQLIsNull(col)              => Some(col.columnName.split("\\.").head)
-      case SQLIsNotNull(col)           => Some(col.columnName.split("\\.").head)
-      case relation: ElasticRelation   => relation.`type`
-      case _                           => None
+
+    private[this] def rtype(criteria: SQLCriteria): Option[String] = criteria match {
+      case SQLPredicate(left, _, right, _) => rtype(left).orElse(rtype(right))
+      case c: SQLCriteriaWithIdentifier =>
+        c.identifier.nestedType.orElse(c.identifier.columnName.split('.').headOption)
+      case relation: ElasticRelation => relation.relationType
+      case _                         => None
     }
-    lazy val `type`: Option[String] = _retrieveType(criteria)
+
+    lazy val relationType: Option[String] = rtype(criteria)
+
+    override def asFilter(): ElasticFilter = this
   }
 
   case class ElasticNested(override val criteria: SQLCriteria)
       extends ElasticRelation(criteria, NESTED) {
     override def update(query: SQLSelectQuery): ElasticNested =
       this.copy(criteria = criteria.update(query))
+
+    override def nested: Boolean = true
+
+    private[this] def name(criteria: SQLCriteria): Option[String] = criteria match {
+      case SQLPredicate(left, _, right, _) => name(left).orElse(name(right))
+      case c: SQLCriteriaWithIdentifier =>
+        c.identifier.innerHitsName.orElse(c.identifier.columnName.split('.').headOption)
+      case n: ElasticNested => name(n.criteria)
+      case _                => None
+    }
+
+    lazy val innerHitsName: Option[String] = name(criteria)
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query = {
+      if (innerHitsNames.contains(innerHitsName.getOrElse(""))) {
+        criteria.asFilter().query(innerHitsNames)
+      } else {
+        nestedQuery(
+          relationType.getOrElse(""),
+          criteria.asFilter().query(innerHitsNames + innerHitsName.getOrElse(""))
+        )
+          .inner(innerHits(innerHitsName.getOrElse("")))
+      }
+    }
   }
 
   case class ElasticChild(override val criteria: SQLCriteria)
       extends ElasticRelation(criteria, CHILD) {
     override def update(query: SQLSelectQuery): ElasticChild =
       this.copy(criteria = criteria.update(query))
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query =
+      hasChildQuery(relationType.getOrElse(""), criteria.asFilter().query(innerHitsNames))
   }
 
   case class ElasticParent(override val criteria: SQLCriteria)
       extends ElasticRelation(criteria, PARENT) {
     override def update(query: SQLSelectQuery): ElasticParent =
       this.copy(criteria = criteria.update(query))
+
+    override def query(innerHitsNames: Set[String] = Set.empty): Query =
+      hasParentQuery(
+        relationType.getOrElse(""),
+        criteria.asFilter().query(innerHitsNames),
+        score = false
+      )
   }
 
   sealed trait SQLDelimiter extends SQLToken
@@ -381,6 +734,14 @@ package object sql {
   ) extends SQLToken {
     override def sql: String = s"${identifier.sql}${asString(alias)}"
     def update(query: SQLSelectQuery): SQLField = this.copy(identifier = identifier.update(query))
+    lazy val sourceField: String =
+      if (identifier.nested) {
+        identifier.alias
+          .map(a => s"$a.")
+          .getOrElse("") + identifier.columnName.split("\\.").tail.mkString(".")
+      } else {
+        identifier.columnName
+      }
   }
 
   class SQLAggregate(
@@ -409,16 +770,26 @@ package object sql {
   }
 
   sealed trait SQLSource extends SQLToken {
-    def alias: Option[String]
+    def update(query: SQLSelectQuery): SQLSource
+  }
+
+  case class SQLUnnest(identifier: SQLIdentifier) extends SQLSource {
+    override def sql: String = s"unnest(${identifier /*.copy(distinct = None)*/ .sql})"
+    def update(query: SQLSelectQuery): SQLUnnest = this.copy(identifier = identifier.update(query))
   }
 
   case class SQLTable(source: SQLSource, alias: Option[SQLAlias] = None) extends SQLToken {
     override def sql: String = s"$source${asString(alias)}"
+    def update(query: SQLSelectQuery): SQLTable = this.copy(source = source.update(query))
   }
 
   case class SQLFrom(tables: Seq[SQLTable]) extends SQLToken {
     override def sql: String = s" $FROM ${tables.map(_.sql).mkString(",")}"
     lazy val aliases: Seq[String] = tables.flatMap((table: SQLTable) => table.alias).map(_.alias)
+    lazy val unnests: Seq[(String, String)] = tables.collect { case SQLTable(u: SQLUnnest, a) =>
+      (a.map(_.alias).getOrElse(u.identifier.columnName), u.identifier.columnName)
+    }
+    def update(query: SQLSelectQuery): SQLFrom = this.copy(tables = tables.map(_.update(query)))
   }
 
   case class SQLWhere(criteria: Option[SQLCriteria]) extends SQLToken {
@@ -447,8 +818,11 @@ package object sql {
   ) extends SQLToken {
     override def sql: String = s"${select.sql}${from.sql}${asString(where)}${asString(limit)}"
     lazy val aliases: Seq[String] = from.aliases
-    def update(): SQLSelectQuery =
-      this.copy(select = select.update(this), where = where.map(_.update(this)))
+    lazy val unnests: Seq[(String, String)] = from.unnests
+    def update(): SQLSelectQuery = {
+      val updated = this.copy(from = from.update(this))
+      updated.copy(select = select.update(updated), where = where.map(_.update(updated)))
+    }
   }
 
   class SQLSelectAggregatesQuery(
@@ -457,12 +831,21 @@ package object sql {
     where: Option[SQLWhere],
     limit: Option[SQLLimit] = None
   ) extends SQLSelectQuery(selectAggregates, from, where, limit) {
-    override def update(): SQLSelectAggregatesQuery = new SQLSelectAggregatesQuery(
-      selectAggregates.update(this),
+    def withFrom(from: SQLFrom): SQLSelectAggregatesQuery = new SQLSelectAggregatesQuery(
+      selectAggregates,
       from,
-      where.map(_.update(this)),
+      where,
       limit
     )
+    override def update(): SQLSelectAggregatesQuery = {
+      val updated = this.withFrom(from.update(this))
+      new SQLSelectAggregatesQuery(
+        selectAggregates.update(updated),
+        updated.from,
+        where.map(_.update(updated)),
+        limit
+      )
+    }
   }
 
   case class SQLQuery(query: String)

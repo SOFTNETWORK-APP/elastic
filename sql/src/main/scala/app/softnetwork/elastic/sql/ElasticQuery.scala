@@ -9,7 +9,6 @@ import com.sksamuel.elastic4s.searches.queries.{BoolQuery, Query}
   */
 object ElasticQuery {
 
-  import ElasticFilters._
   import SQLImplicits._
 
   def select(sqlQuery: SQLQuery): Option[ElasticSelect] = select(sqlQuery.query)
@@ -24,11 +23,13 @@ object ElasticQuery {
           case _       => None
         }
 
-        val fields = s.select.fields.map(_.identifier.columnName)
+        val fields = s.select.fields.map(_.sourceField)
 
         val sources = s.from.tables.map((table: SQLTable) => table.source.sql)
 
-        val queryFiltered = filter(criteria) match {
+        val queryFiltered = criteria
+          .map(_.filter(None).query(Set.empty))
+          .getOrElse(matchAllQuery) /*filter(criteria)*/ match {
           case b: BoolQuery => b
           case q: Query     => boolQuery().filter(q)
         }
@@ -62,7 +63,9 @@ object ElasticQuery {
           case Some(w) => w.criteria
           case _       => None
         }
-        val sources = s.from.tables.map((table: SQLTable) => table.source.sql)
+        val sources = s.from.tables.collect { case SQLTable(source: SQLIdentifier, _) =>
+          source.sql
+        }
         s.selectAggregates.aggregates.map((aggregation: SQLAggregate) => {
           val identifier = aggregation.identifier
           val sourceField = identifier.columnName
@@ -86,7 +89,9 @@ object ElasticQuery {
 
           var aggPath = Seq[String]()
 
-          val queryFiltered = filter(criteria) match {
+          val queryFiltered = criteria
+            .map(_.filter(None).query(Set.empty))
+            .getOrElse(matchAllQuery) /*filter(criteria)*/ match {
             case b: BoolQuery => b
             case q: Query     => boolQuery().filter(q)
           }
@@ -120,7 +125,12 @@ object ElasticQuery {
                     case Some(f) =>
                       val filteredAgg = s"filtered_agg"
                       aggPath ++= Seq(filteredAgg)
-                      filterAgg(filteredAgg, filter(f.criteria, identifier.nestedType)) subaggs {
+                      filterAgg(
+                        filteredAgg,
+                        f.criteria
+                          .map(_.asFilter().query(Set(identifier.innerHitsName).flatten))
+                          .getOrElse(matchAllQuery())
+                      ) subaggs {
                         aggPath ++= Seq(agg)
                         _agg
                       }
