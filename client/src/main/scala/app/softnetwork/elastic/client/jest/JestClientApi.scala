@@ -4,8 +4,8 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Flow
 import app.softnetwork.elastic.client._
+import app.softnetwork.elastic.sql
 import app.softnetwork.elastic.sql.{ElasticQuery, SQLQueries, SQLQuery}
-import app.softnetwork.persistence.message.CountResponse
 import app.softnetwork.persistence.model.Timestamped
 import app.softnetwork.serialization._
 import io.searchbox.action.BulkableAction
@@ -34,6 +34,7 @@ trait JestClientApi
     with JestRefreshApi
     with JestFlushApi
     with JestCountApi
+    with JestSingleValueAggregateApi
     with JestIndexApi
     with JestUpdateApi
     with JestDeleteApi
@@ -124,82 +125,108 @@ trait JestCountApi extends CountApi with JestClientCompanion {
       logger.error(result.getErrorMessage)
     Option(result.getCount)
   }
+}
 
-  override def countAsync(
+trait JestSingleValueAggregateApi extends SingleValueAggregateApi with JestCountApi {
+  override def aggregate(
     sqlQuery: SQLQuery
-  )(implicit ec: ExecutionContext): Future[_root_.scala.collection.Seq[CountResponse]] = {
-    val futures = for (elasticCount <- ElasticQuery.aggregate(sqlQuery)) yield {
-      val promise: Promise[CountResponse] = Promise()
-      val _field = elasticCount.field
-      val _sourceField = elasticCount.sourceField
-      val _agg = elasticCount.aggName
-      val _query = elasticCount.query
-      val _sources = elasticCount.sources
-      _sourceField match {
-        case "_id" =>
+  )(implicit ec: ExecutionContext): Future[Seq[SingleValueAggregateResult]] = {
+    val futures = for (aggregation <- ElasticQuery.aggregate(sqlQuery)) yield {
+      val promise: Promise[SingleValueAggregateResult] = Promise()
+      val field = aggregation.field
+      val sourceField = aggregation.sourceField
+      val aggType = aggregation.aggType
+      val aggName = aggregation.aggName
+      val query = aggregation.query
+      val sources = aggregation.sources
+      sourceField match {
+        case "_id" if aggType.sql == "count" =>
           countAsync(
             JSONQuery(
-              _query,
-              collection.immutable.Seq(_sources: _*),
+              query,
+              collection.immutable.Seq(sources: _*),
               collection.immutable.Seq.empty[String]
             )
           ).onComplete {
             case Success(result) =>
-              promise.success(CountResponse(_field, result.getOrElse(0d).toInt, None))
+              promise.success(
+                SingleValueAggregateResult(
+                  field,
+                  aggType,
+                  result.getOrElse(0d),
+                  None
+                )
+              )
             case Failure(f) =>
               logger.error(f.getMessage, f.fillInStackTrace())
-              promise.success(CountResponse(_field, 0, Some(f.getMessage)))
+              promise.success(SingleValueAggregateResult(field, aggType, 0d, Some(f.getMessage)))
           }
+          promise.future
         case _ =>
           import JestClientApi._
           import JestClientResultHandler._
           apply()
             .executeAsyncPromise(
               JSONQuery(
-                _query,
-                collection.immutable.Seq(_sources: _*),
+                query,
+                collection.immutable.Seq(sources: _*),
                 collection.immutable.Seq.empty[String]
               ).search
             )
             .onComplete {
               case Success(result) =>
-                val agg = _agg.split("\\.").last
+                val agg = aggName.split("\\.").last
 
-                val itAgg = _agg.split("\\.").iterator
+                val itAgg = aggName.split("\\.").iterator
 
                 var root =
-                  if (elasticCount.nested)
+                  if (aggregation.nested)
                     result.getAggregations.getAggregation(itAgg.next(), classOf[RootAggregation])
                   else
                     result.getAggregations
 
-                if (elasticCount.filtered) {
+                if (aggregation.filtered) {
                   root = root.getAggregation(itAgg.next(), classOf[RootAggregation])
                 }
 
                 promise.success(
-                  CountResponse(
-                    _field,
-                    if (elasticCount.distinct)
-                      root.getCardinalityAggregation(agg).getCardinality.toInt
-                    else
-                      root.getValueCountAggregation(agg).getValueCount.toInt,
+                  SingleValueAggregateResult(
+                    field,
+                    aggType,
+                    aggType match {
+                      case sql.Count =>
+                        if (aggregation.distinct)
+                          root.getCardinalityAggregation(agg).getCardinality.doubleValue()
+                        else {
+                          root.getValueCountAggregation(agg).getValueCount.doubleValue()
+                        }
+                      case sql.Sum =>
+                        root.getSumAggregation(agg).getSum
+                      case sql.Avg =>
+                        root.getAvgAggregation(agg).getAvg
+                      case sql.Min =>
+                        root.getMinAggregation(agg).getMin
+                      case sql.Max =>
+                        root.getMaxAggregation(agg).getMax
+                      case _ => 0d
+                    },
                     None
                   )
                 )
 
               case Failure(f) =>
                 logger.error(f.getMessage, f.fillInStackTrace())
-                promise.success(CountResponse(_field, 0, Some(f.getMessage)))
+                promise.success(SingleValueAggregateResult(field, aggType, 0d, Some(f.getMessage)))
             }
+
+          promise.future
       }
-      promise.future
     }
     Future.sequence(futures)
   }
 }
 
-trait JestIndexApi extends IndexApi with JestClientCompanion {
+trait JestIndexApi extends IndexApi with JestClientCompanion { _: RefreshApi =>
   override def index(index: String, _type: String, id: String, source: String): Boolean = {
     Try(
       apply().execute(
@@ -234,7 +261,7 @@ trait JestIndexApi extends IndexApi with JestClientCompanion {
 
 }
 
-trait JestUpdateApi extends UpdateApi with JestClientCompanion {
+trait JestUpdateApi extends UpdateApi with JestClientCompanion { _: RefreshApi =>
   override def update(
     index: String,
     _type: String,
@@ -292,7 +319,7 @@ trait JestUpdateApi extends UpdateApi with JestClientCompanion {
 
 }
 
-trait JestDeleteApi extends DeleteApi with JestClientCompanion {
+trait JestDeleteApi extends DeleteApi with JestClientCompanion { _: RefreshApi =>
   override def delete(uuid: String, index: String, _type: String): Boolean = {
     val result = apply().execute(
       new Delete.Builder(uuid).index(index).`type`(_type).build()

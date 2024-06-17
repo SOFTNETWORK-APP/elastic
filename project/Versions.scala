@@ -1,5 +1,7 @@
 object Versions {
 
+//  val akka = "2.6.20"
+
   val scalatest = "3.2.16"
 
   val typesafeConfig = "1.4.2"

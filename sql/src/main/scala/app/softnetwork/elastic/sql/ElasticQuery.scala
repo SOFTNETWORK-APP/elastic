@@ -45,7 +45,15 @@ object ElasticQuery {
 
         val q = SearchBodyBuilderFn(_search).string()
 
-        Some(ElasticSelect(s.select.fields, sources, q.replace("\"version\":true,", "") /*FIXME*/ ))
+        Some(
+          ElasticSelect(
+            s.select.fields,
+            sources,
+            s.where.flatMap(_.criteria),
+            s.limit.map(_.limit),
+            q.replace("\"version\":true,", "") /*FIXME*/
+          )
+        )
 
       case _ => None
     }
@@ -195,5 +203,7 @@ case class ElasticAggregation(
 case class ElasticSelect(
   fields: Seq[SQLField],
   sources: Seq[String],
+  criteria: Option[SQLCriteria],
+  limit: Option[Int],
   query: String
 )

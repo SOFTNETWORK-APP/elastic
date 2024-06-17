@@ -185,11 +185,6 @@ trait MockElasticClientApi extends ElasticClientApi {
   override implicit def toBulkElasticResult(r: R): BulkElasticResult =
     throw new UnsupportedOperationException
 
-  override def countAsync(sqlQuery: SQLQuery)(implicit
-    ec: ExecutionContext
-  ): Future[scala.Seq[CountResponse]] =
-    throw new UnsupportedOperationException
-
   override def multiSearchWithInnerHits[U, I](jsonQueries: JSONQueries, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
@@ -218,6 +213,11 @@ trait MockElasticClientApi extends ElasticClientApi {
   ): List[(U, List[I])] = List.empty
 
   override def getMapping(index: String, _type: String): String =
+    throw new UnsupportedOperationException
+
+  override def aggregate(sqlQuery: SQLQuery)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[SingleValueAggregateResult]] =
     throw new UnsupportedOperationException
 }
 

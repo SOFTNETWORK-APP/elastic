@@ -6,7 +6,6 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import _root_.akka.stream.{FlowShape, Materializer}
 import akka.stream.scaladsl._
-import app.softnetwork.persistence.message.CountResponse
 import app.softnetwork.persistence.model.Timestamped
 import app.softnetwork.serialization._
 import app.softnetwork.elastic.sql.{SQLQueries, SQLQuery}
@@ -27,6 +26,7 @@ trait ElasticClientApi
     with AliasApi
     with MappingApi
     with CountApi
+    with SingleValueAggregateApi
     with SearchApi
     with IndexApi
     with UpdateApi
@@ -128,14 +128,19 @@ trait FlushApi {
   def flush(index: String, force: Boolean = true, wait: Boolean = true): Boolean
 }
 
-trait IndexApi {
+trait IndexApi { _: RefreshApi =>
   def index[U <: Timestamped](
     entity: U,
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U], formats: Formats): Boolean = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    this.index(index.getOrElse(_type), _type, entity.uuid, serialization.write[U](entity))
+    this.index(
+      index.getOrElse(_type),
+      _type,
+      entity.uuid,
+      serialization.write[U](entity)
+    ) && this.refresh(index.getOrElse(_type))
   }
 
   def index(index: String, _type: String, id: String, source: String): Boolean
@@ -147,6 +152,7 @@ trait IndexApi {
   )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     indexAsync(index.getOrElse(_type), _type, entity.uuid, serialization.write[U](entity))
+      .map(_ && this.refresh(index.getOrElse(_type)))
   }
 
   def indexAsync(index: String, _type: String, id: String, source: String)(implicit
@@ -154,7 +160,7 @@ trait IndexApi {
   ): Future[Boolean]
 }
 
-trait UpdateApi {
+trait UpdateApi { _: RefreshApi =>
   def update[U <: Timestamped](
     entity: U,
     index: Option[String] = None,
@@ -162,7 +168,13 @@ trait UpdateApi {
     upsert: Boolean = true
   )(implicit u: ClassTag[U], formats: Formats): Boolean = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    this.update(index.getOrElse(_type), _type, entity.uuid, serialization.write[U](entity), upsert)
+    this.update(
+      index.getOrElse(_type),
+      _type,
+      entity.uuid,
+      serialization.write[U](entity),
+      upsert
+    ) && this.refresh(index.getOrElse(_type))
   }
 
   def update(index: String, _type: String, id: String, source: String, upsert: Boolean): Boolean
@@ -174,13 +186,15 @@ trait UpdateApi {
     upsert: Boolean = true
   )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    this.updateAsync(
-      index.getOrElse(_type),
-      _type,
-      entity.uuid,
-      serialization.write[U](entity),
-      upsert
-    )
+    this
+      .updateAsync(
+        index.getOrElse(_type),
+        _type,
+        entity.uuid,
+        serialization.write[U](entity),
+        upsert
+      )
+      .map(_ && this.refresh(index.getOrElse(_type)))
   }
 
   def updateAsync(index: String, _type: String, id: String, source: String, upsert: Boolean)(
@@ -188,14 +202,16 @@ trait UpdateApi {
   ): Future[Boolean]
 }
 
-trait DeleteApi {
+trait DeleteApi { _: RefreshApi =>
   def delete[U <: Timestamped](
     entity: U,
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U]): Boolean = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    delete(entity.uuid, index.getOrElse(_type), _type)
+    delete(entity.uuid, index.getOrElse(_type), _type) && this.refresh(
+      index.getOrElse(_type)
+    )
   }
 
   def delete(uuid: String, index: String, _type: String): Boolean
@@ -207,6 +223,7 @@ trait DeleteApi {
   )(implicit u: ClassTag[U], ec: ExecutionContext): Future[Boolean] = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     deleteAsync(entity.uuid, index.getOrElse(_type), _type)
+      .map(_ && this.refresh(index.getOrElse(_type)))
   }
 
   def deleteAsync(uuid: String, index: String, _type: String)(implicit
@@ -443,10 +460,15 @@ trait CountApi {
 
   def count(query: JSONQuery): Option[Double]
 
-  def countAsync(sqlQuery: SQLQuery)(implicit
-    ec: ExecutionContext
-  ): Future[_root_.scala.collection.Seq[CountResponse]]
 }
+
+trait AggregateApi[T <: AggregateResult] {
+  def aggregate(sqlQuery: SQLQuery)(implicit
+    ec: ExecutionContext
+  ): Future[_root_.scala.collection.Seq[T]]
+}
+
+trait SingleValueAggregateApi extends AggregateApi[SingleValueAggregateResult]
 
 trait GetApi {
   def get[U <: Timestamped](
