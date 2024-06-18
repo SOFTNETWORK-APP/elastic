@@ -140,7 +140,7 @@ trait IndexApi { _: RefreshApi =>
       _type,
       entity.uuid,
       serialization.write[U](entity)
-    ) && this.refresh(index.getOrElse(_type))
+    )
   }
 
   def index(index: String, _type: String, id: String, source: String): Boolean
@@ -152,7 +152,6 @@ trait IndexApi { _: RefreshApi =>
   )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     indexAsync(index.getOrElse(_type), _type, entity.uuid, serialization.write[U](entity))
-      .map(_ && this.refresh(index.getOrElse(_type)))
   }
 
   def indexAsync(index: String, _type: String, id: String, source: String)(implicit
@@ -174,7 +173,7 @@ trait UpdateApi { _: RefreshApi =>
       entity.uuid,
       serialization.write[U](entity),
       upsert
-    ) && this.refresh(index.getOrElse(_type))
+    )
   }
 
   def update(index: String, _type: String, id: String, source: String, upsert: Boolean): Boolean
@@ -194,7 +193,6 @@ trait UpdateApi { _: RefreshApi =>
         serialization.write[U](entity),
         upsert
       )
-      .map(_ && this.refresh(index.getOrElse(_type)))
   }
 
   def updateAsync(index: String, _type: String, id: String, source: String, upsert: Boolean)(
@@ -209,9 +207,7 @@ trait DeleteApi { _: RefreshApi =>
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U]): Boolean = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    delete(entity.uuid, index.getOrElse(_type), _type) && this.refresh(
-      index.getOrElse(_type)
-    )
+    delete(entity.uuid, index.getOrElse(_type), _type)
   }
 
   def delete(uuid: String, index: String, _type: String): Boolean
@@ -223,7 +219,6 @@ trait DeleteApi { _: RefreshApi =>
   )(implicit u: ClassTag[U], ec: ExecutionContext): Future[Boolean] = {
     val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     deleteAsync(entity.uuid, index.getOrElse(_type), _type)
-      .map(_ && this.refresh(index.getOrElse(_type)))
   }
 
   def deleteAsync(uuid: String, index: String, _type: String)(implicit

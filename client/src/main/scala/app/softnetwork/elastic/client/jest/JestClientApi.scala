@@ -236,7 +236,7 @@ trait JestIndexApi extends IndexApi with JestClientCompanion { _: RefreshApi =>
       case Success(s) =>
         if (!s.isSucceeded)
           logger.error(s.getErrorMessage)
-        s.isSucceeded
+        s.isSucceeded && this.refresh(index)
       case Failure(f) =>
         logger.error(f.getMessage, f)
         false
@@ -251,7 +251,7 @@ trait JestIndexApi extends IndexApi with JestClientCompanion { _: RefreshApi =>
     apply().executeAsyncPromise(
       new Index.Builder(source).index(index).`type`(_type).id(id).build()
     ) onComplete {
-      case Success(s) => promise.success(s.isSucceeded)
+      case Success(s) => promise.success(s.isSucceeded && this.refresh(index))
       case Failure(f) =>
         logger.error(f.getMessage, f)
         promise.failure(f)
@@ -282,7 +282,7 @@ trait JestUpdateApi extends UpdateApi with JestClientCompanion { _: RefreshApi =
       case Success(s) =>
         if (!s.isSucceeded)
           logger.error(s.getErrorMessage)
-        s.isSucceeded
+        s.isSucceeded && this.refresh(index)
       case Failure(f) =>
         logger.error(f.getMessage, f)
         false
@@ -309,7 +309,7 @@ trait JestUpdateApi extends UpdateApi with JestClientCompanion { _: RefreshApi =
       case Success(s) =>
         if (!s.isSucceeded)
           logger.error(s.getErrorMessage)
-        promise.success(s.isSucceeded)
+        promise.success(s.isSucceeded && this.refresh(index))
       case Failure(f) =>
         logger.error(f.getMessage, f)
         promise.failure(f)
@@ -327,7 +327,7 @@ trait JestDeleteApi extends DeleteApi with JestClientCompanion { _: RefreshApi =
     if (!result.isSucceeded) {
       logger.error(result.getErrorMessage)
     }
-    result.isSucceeded
+    result.isSucceeded && this.refresh(index)
   }
 
   override def deleteAsync(uuid: String, index: String, _type: String)(implicit
@@ -341,7 +341,7 @@ trait JestDeleteApi extends DeleteApi with JestClientCompanion { _: RefreshApi =
       case Success(s) =>
         if (!s.isSucceeded)
           logger.error(s.getErrorMessage)
-        promise.success(s.isSucceeded)
+        promise.success(s.isSucceeded && this.refresh(index))
       case Failure(f) =>
         logger.error(f.getMessage, f)
         promise.failure(f)
