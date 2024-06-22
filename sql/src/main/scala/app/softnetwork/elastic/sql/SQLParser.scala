@@ -7,7 +7,7 @@ import scala.util.parsing.combinator.RegexParsers
   * SQL Parser for ElasticSearch
   *
   * TODO implements SQL :
-  *   - EXCEPT,
+  *   - MATCH,
   *   - UNION,
   *   - JOIN,
   *   - GROUP BY,
@@ -16,7 +16,8 @@ import scala.util.parsing.combinator.RegexParsers
   */
 object SQLParser extends RegexParsers {
 
-  val regexAlias = """\b(?!(?i)where\b)\b(?!(?i)filter\b)\b(?!(?i)from\b)[a-zA-Z0-9_]*"""
+  val regexAlias =
+    """\b(?!(?i)except\b)\b(?!(?i)where\b)\b(?!(?i)filter\b)\b(?!(?i)from\b)[a-zA-Z0-9_]*"""
 
   def identifier: Parser[SQLIdentifier] =
     "(?i)distinct".r.? ~ """[\*a-zA-Z_\-][a-zA-Z0-9_\-\.\[\]\*]*""".r ^^ { case d ~ str =>
@@ -86,6 +87,11 @@ object SQLParser extends RegexParsers {
       case _ ~ _ ~ i ~ _ ~ _ ~ lat ~ _ ~ lon ~ _ ~ _ ~ _ ~ d => ElasticGeoDistance(i, d, lat, lon)
     }
 
+  def matchExpression: Parser[ElasticMatch] =
+    "(?i)match".r ~ start ~ identifier ~ separator ~ literal ~ separator.? ~ literal.? ~ end ^^ {
+      case _ ~ _ ~ i ~ _ ~ l ~ _ ~ o ~ _ => ElasticMatch(i, l, o.map(_.value))
+    }
+
   def start: Parser[SQLDelimiter] = "(" ^^ (_ => StartPredicate)
   def end: Parser[SQLDelimiter] = ")" ^^ (_ => EndPredicate)
   def separator: Parser[SQLDelimiter] = "," ^^ (_ => Separator)
@@ -99,9 +105,9 @@ object SQLParser extends RegexParsers {
   def parent: Parser[ElasticOperator] = "(?i)parent".r ^^ (_ => PARENT)
 
   def criteria: Parser[SQLCriteria] =
-    start.? ~ (equalityExpression | likeExpression | comparisonExpression | inLiteralExpression | inNumericalExpression | betweenExpression | isNotNullExpression | isNullExpression | distanceExpression) ~ end.? ^^ {
-      case _ ~ c ~ _ => c
-    }
+    (equalityExpression | likeExpression | comparisonExpression | inLiteralExpression | inNumericalExpression | betweenExpression | isNotNullExpression | isNullExpression | distanceExpression | matchExpression) ^^ (
+      c => c
+    )
 
   def predicate: Parser[SQLPredicate] = criteria ~ (and | or) ~ not.? ~ criteria ^^ {
     case l ~ o ~ n ~ r => SQLPredicate(l, o, r, n)
@@ -159,6 +165,11 @@ object SQLParser extends RegexParsers {
     SQLField(i, a)
   }
 
+  def except: Parser[SQLExcept] = "(?i)except".r ~ start ~ rep1sep(field, separator) ~ end ^^ {
+    case _ ~ _ ~ e ~ _ =>
+      SQLExcept(e)
+  }
+
   def aggregate: Parser[SQLAggregate] =
     (min | max | avg | sum | count) ~ start ~ identifier ~ end ~ alias.? ~ filter.? ^^ {
       case agg ~ _ ~ i ~ _ ~ a ~ f => new SQLAggregate(agg, i, a, f)
@@ -169,8 +180,9 @@ object SQLParser extends RegexParsers {
       new SQLSelectAggregates(aggregates)
   }
 
-  def select: Parser[SQLSelect] = _select ~ rep1sep(field, separator) ^^ { case _ ~ fields =>
-    SQLSelect(fields)
+  def select: Parser[SQLSelect] = _select ~ rep1sep(field, separator) ~ except.? ^^ {
+    case _ ~ fields ~ e =>
+      SQLSelect(fields, e)
   }
 
   def unnest: Parser[SQLTable] = "(?i)unnest".r ~ start ~ identifier ~ end ~ alias ^^ {
@@ -191,7 +203,7 @@ object SQLParser extends RegexParsers {
     nestedCriteria | childCriteria | parentCriteria | criteria
 
   def whereCriteria: SQLParser.Parser[List[SQLToken]] = rep1(
-    allPredicate | allCriteria | start | or | and | end
+    predicate | criteria | start | or | and | end
   )
 
   def where: Parser[SQLWhere] = _where ~ whereCriteria ^^ { case _ ~ rawTokens =>
@@ -255,41 +267,49 @@ object SQLParser extends RegexParsers {
   @tailrec
   private def processTokensHelper(
     tokens: List[SQLToken],
-    stack: List[SQLToken]
+    stack: List[SQLToken],
+    group: Boolean = false
   ): Option[SQLCriteria] = {
     tokens match {
       case Nil =>
         stack match {
-          case right :: (op: SQLPredicateOperator) :: left :: Nil =>
+          case (right: SQLCriteria) :: (op: SQLPredicateOperator) :: (left: SQLCriteria) :: Nil =>
             Option(
-              SQLPredicate(left.asInstanceOf[SQLCriteria], op, right.asInstanceOf[SQLCriteria])
+              SQLPredicate(left, op, right, group = group)
             )
           case _ =>
             stack.headOption.collect { case c: SQLCriteria => c }
         }
-      case (c: SQLCriteria) :: rest =>
-        stack match {
-          case (op: SQLPredicateOperator) :: left :: tail =>
-            val predicate = SQLPredicate(left.asInstanceOf[SQLCriteria], op, c)
-            processTokensHelper(rest, predicate :: tail)
-          case _ =>
-            processTokensHelper(rest, c :: stack)
-        }
-      case (op: SQLPredicateOperator) :: rest =>
-        stack match {
-          case right :: left :: tail =>
-            val predicate =
-              SQLPredicate(left.asInstanceOf[SQLCriteria], op, right.asInstanceOf[SQLCriteria])
-            processTokensHelper(rest, predicate :: tail)
-          case _ :: Nil =>
-            processTokensHelper(rest, op :: stack)
-          case _ =>
-            throw new IllegalStateException("Invalid stack state for predicate creation")
-        }
-      case (start: StartDelimiter) :: rest =>
+      case (_: StartDelimiter) :: rest =>
         val (subTokens, remainingTokens) = extractSubTokens(rest, 1)
         val subCriteria = processSubTokens(subTokens)
         processTokensHelper(remainingTokens, subCriteria :: stack)
+      case (c: SQLCriteria) :: rest =>
+        stack match {
+          case (op: SQLPredicateOperator) :: (left: SQLCriteria) :: tail =>
+            val predicate = SQLPredicate(left, op, c, group = group)
+            processTokensHelper(rest, predicate :: tail)
+          case _ =>
+            processTokensHelper(rest, c :: stack, group = group)
+        }
+      case (op: SQLPredicateOperator) :: rest =>
+        stack match {
+          case (right: SQLCriteria) :: (left: SQLCriteria) :: tail =>
+            val predicate = SQLPredicate(left, op, right, group = group)
+            processTokensHelper(rest, predicate :: tail)
+          case (right: SQLCriteria) :: (o: SQLPredicateOperator) :: tail =>
+            tail match {
+              case (left: SQLCriteria) :: tt =>
+                val predicate = SQLPredicate(left, op, right, group = group)
+                processTokensHelper(rest, o :: predicate :: tt)
+              case _ =>
+                processTokensHelper(rest, op :: stack)
+            }
+          case _ :: Nil =>
+            processTokensHelper(rest, op :: stack, group = group)
+          case _ =>
+            throw new IllegalStateException("Invalid stack state for predicate creation")
+        }
       case (_: EndDelimiter) :: rest =>
         processTokensHelper(rest, stack) // Ignore and move on
       case _ => throw new IllegalStateException("Unexpected token type")
@@ -314,7 +334,7 @@ object SQLParser extends RegexParsers {
     * @return
     */
   private def processSubTokens(tokens: List[SQLToken]): SQLCriteria = {
-    processTokensHelper(tokens, Nil).getOrElse(
+    processTokensHelper(tokens, Nil, group = true).getOrElse(
       throw new IllegalStateException("Empty sub-expression")
     )
   }

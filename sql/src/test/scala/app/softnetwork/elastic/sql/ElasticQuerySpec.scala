@@ -1,5 +1,6 @@
 package app.softnetwork.elastic.sql
 
+import app.softnetwork.elastic.sql.Queries._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -145,7 +146,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     result.query shouldBe
     """{
         |  "query": {
-        |    "bool":{"filter":[{"bool": {
+        |    "bool":{
         |      "filter": [
         |          {
         |            "term": {
@@ -170,7 +171,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |          }
         |      ]
         |    }
-        |  }]}},
+        |  },
         |  "size": 0,
         |  "aggs": {
         |    "nested_emails": {
@@ -205,7 +206,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     result.query shouldBe
     """{
         |  "query": {
-        |    "bool":{"filter":[{"bool": {
+        |    "bool":{
         |      "filter": [
         |        {
         |          "term": {
@@ -230,7 +231,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |        }
         |      ]
         |    }
-        |  }]}},
+        |  },
         |  "size": 0,
         |  "aggs": {
         |    "nested_emails": {
@@ -268,7 +269,6 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     )
     results.size shouldBe 1
     val result = results.head
-    println(result.query)
     result.nested shouldBe true
     result.distinct shouldBe true
     result.aggName shouldBe "nested_emails.agg_distinct_emails_value"
@@ -476,6 +476,32 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
       |}""".stripMargin.replaceAll("\\s+", "")
   }
 
+  it should "exclude fields from select" in {
+    val select = ElasticQuery.select(
+      SQLQuery(
+        except
+      )
+    )
+    select.isDefined shouldBe true
+    val result = select.get
+    result.query shouldBe
+      """
+        |{
+        | "query":{
+        |   "bool":{
+        |     "filter":[
+        |       {
+        |         "match_all":{}
+        |       }
+        |     ]
+        |   }
+        | },
+        | "_source":{
+        |   "excludes":["col1","col2"]
+        | }
+        |}""".stripMargin.replaceAll("\\s+", "")
+  }
+
   it should "handle complex query" in {
     val select = ElasticQuery.select(
       SQLQuery(
@@ -485,18 +511,29 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |  stores-dev store,
            |  UNNEST(store.products) as inner_products
            |WHERE
-           |  firstName is not null AND
-           |  lastName is not null AND
-           |  description is not null AND
-           |  store.deliveryPeriods.dayOfWeek=6 AND (
-           |    distance(pickup.location,(0.0,0.0)) <= "7000m" OR
-           |    distance(withdrawals.location,(0.0,0.0)) <= "7000m"
+           |  (
+           |    firstName is not null AND
+           |    lastName is not null AND
+           |    description is not null AND
+           |    preparationTime <= 120 AND
+           |    store.deliveryPeriods.dayOfWeek=6 AND (
+           |      distance(pickup.location,(0.0,0.0)) <= "7000m" OR
+           |      distance(withdrawals.location,(0.0,0.0)) <= "7000m"
+           |    ) AND
+           |    (
+           |      blockedCustomers not like "uuid" AND
+           |      NOT receiptOfOrdersDisabled=true
+           |    )
            |  ) AND
-           |  preparationTime <= 120 AND
-           |  NOT receiptOfOrdersDisabled=true AND
-           |  blockedCustomers not like "uuid" AND (
-           |    (inner_products.category in ("category1","category2")) AND
-           |    (inner_products.price <= 100)
+           |  (
+           |    inner_products.deleted=false AND
+           |    inner_products.upForSale=true AND
+           |    inner_products.stock > 0
+           |  ) AND
+           |  (
+           |    match(products.name, "lasagnes") OR
+           |    match(products.description, "lasagnes") OR
+           |    match(products.ingredients, "lasagnes")
            |  )
            |LIMIT 100""".stripMargin
       )
@@ -506,17 +543,4 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     println(result.query)
   }
 
-  it should "just do it" in {
-    val select = ElasticQuery.aggregate(
-      SQLQuery(
-        """
-          |SELECT
-          |  sum(distinct products.code) filter[products.category in ("categorie1", "categorie2")]
-          |FROM store as store, unnest(store.products) as products
-          |WHERE store.uuid = "uuid"""".stripMargin
-      )
-    )
-    val result = select.head
-    println(result.query)
-  }
 }

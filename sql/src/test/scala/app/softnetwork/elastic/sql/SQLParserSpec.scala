@@ -59,6 +59,8 @@ object Queries {
   val isNotNull = "select * from Table where identifier is not null"
   val geoDistanceCriteria =
     "select * from Table where distance(profile.location,(-70.0,40.0)) <= \"5km\""
+  val except = "select * except(col1,col2) from Table"
+  val matchCriteria = "select * from Table where match(identifier,\"value\",\"options\")"
 }
 
 /** Created by smanciot on 15/02/17.
@@ -270,6 +272,16 @@ class SQLParserSpec extends AnyFlatSpec with Matchers {
   it should "parse geo distance criteria" in {
     val result = SQLParser(geoDistanceCriteria)
     result.right.get.sql should ===(geoDistanceCriteria)
+  }
+
+  it should "parse except fields" in {
+    val result = SQLParser(except)
+    result.right.get.sql should ===(except)
+  }
+
+  it should "parse match criteria" in {
+    val result = SQLParser(matchCriteria)
+    result.right.get.sql should ===(matchCriteria)
   }
 
 }

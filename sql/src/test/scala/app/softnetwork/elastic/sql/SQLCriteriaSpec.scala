@@ -3,7 +3,6 @@ package app.softnetwork.elastic.sql
 import com.sksamuel.elastic4s.ElasticApi.matchAllQuery
 import com.sksamuel.elastic4s.http.search.SearchBodyBuilderFn
 import com.sksamuel.elastic4s.searches.SearchRequest
-import com.sksamuel.elastic4s.searches.queries.Query
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -19,7 +18,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
     import SQLImplicits._
     val criteria: Option[SQLCriteria] = sql
     val result = SearchBodyBuilderFn(
-      SearchRequest("*") query criteria.map(_.filter(None).query()).getOrElse(matchAllQuery())
+      SearchRequest("*") query criteria.map(_.filter(None).query(currentQuery = None)).getOrElse(matchAllQuery())
     ).string()
     println(result)
     result
@@ -748,6 +747,25 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |    }
         |  }
         |]}}}""".stripMargin.replaceAll("\\s", "")
+  }
+
+  it should "filter match criteria" in {
+    filter(matchCriteria) shouldBe
+      """{
+        | "query":{
+        |   "bool":{
+        |     "filter":[
+        |       {
+        |         "match":{
+        |           "identifier":{
+        |             "query":"value"
+        |           }
+        |         }
+        |       }
+        |     ]
+        |   }
+        | }
+        | }""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter complex queries" in {

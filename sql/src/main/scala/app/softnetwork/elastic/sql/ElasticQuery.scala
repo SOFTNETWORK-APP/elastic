@@ -2,6 +2,7 @@ package app.softnetwork.elastic.sql
 
 import com.sksamuel.elastic4s.ElasticApi._
 import com.sksamuel.elastic4s.http.search.SearchBodyBuilderFn
+import com.sksamuel.elastic4s.searches.SearchRequest
 import com.sksamuel.elastic4s.searches.aggs.Aggregation
 import com.sksamuel.elastic4s.searches.queries.{BoolQuery, Query}
 
@@ -25,33 +26,44 @@ object ElasticQuery {
 
         val fields = s.select.fields.map(_.sourceField)
 
-        val sources = s.from.tables.map((table: SQLTable) => table.source.sql)
+        val excludes = s.select.except.map(_.fields.map(_.sourceField))
+
+        val sources = s.from.tables.collect { case SQLTable(source: SQLIdentifier, _) =>
+          source.sql
+        }
 
         val queryFiltered = criteria
-          .map(_.filter(None).query(Set.empty))
+          .map { c =>
+            val boolQuery = Option(c.boolQuery)
+            c.filter(boolQuery).query(Set.empty, boolQuery)
+          }
           .getOrElse(matchAllQuery) /*filter(criteria)*/ match {
           case b: BoolQuery => b
           case q: Query     => boolQuery().filter(q)
         }
 
-        var _search = search("") query {
+        var _search: SearchRequest = search("") query {
           queryFiltered
         } sourceInclude fields
+
+        excludes match {
+          case Some(e) => _search = _search sourceExclude e
+          case _       => ()
+        }
 
         _search = s.limit match {
           case Some(l) => _search limit l.limit from 0
           case _       => _search
         }
 
-        val q = SearchBodyBuilderFn(_search).string()
-
         Some(
           ElasticSelect(
             s.select.fields,
+            s.select.except,
             sources,
             s.where.flatMap(_.criteria),
             s.limit.map(_.limit),
-            q.replace("\"version\":true,", "") /*FIXME*/
+            _search
           )
         )
 
@@ -98,7 +110,10 @@ object ElasticQuery {
           var aggPath = Seq[String]()
 
           val queryFiltered = criteria
-            .map(_.filter(None).query(Set.empty))
+            .map { c =>
+              val boolQuery = Option(c.boolQuery)
+              c.filter(boolQuery).query(Set.empty, boolQuery)
+            }
             .getOrElse(matchAllQuery) /*filter(criteria)*/ match {
             case b: BoolQuery => b
             case q: Query     => boolQuery().filter(q)
@@ -136,7 +151,7 @@ object ElasticQuery {
                       filterAgg(
                         filteredAgg,
                         f.criteria
-                          .map(_.asFilter().query(Set(identifier.innerHitsName).flatten))
+                          .map(_.asFilter(None).query(Set(identifier.innerHitsName).flatten, None))
                           .getOrElse(matchAllQuery())
                       ) subaggs {
                         aggPath ++= Seq(agg)
@@ -202,8 +217,16 @@ case class ElasticAggregation(
 
 case class ElasticSelect(
   fields: Seq[SQLField],
+  except: Option[SQLExcept],
   sources: Seq[String],
   criteria: Option[SQLCriteria],
   limit: Option[Int],
-  query: String
-)
+  search: SearchRequest
+) {
+  def minScore(score: Double): ElasticSelect = {
+    this.copy(search = search minScore score)
+  }
+
+  def query: String =
+    SearchBodyBuilderFn(search).string().replace("\"version\":true,", "") /*FIXME*/
+}
