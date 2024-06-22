@@ -681,22 +681,17 @@ package object sql {
       innerHitsNames: Set[String] = Set.empty,
       currentQuery: Option[ElasticBoolQuery]
     ): Query = {
-      criteria match {
-        case c: ElasticNested =>
-          c.query(innerHitsNames, currentQuery)
-        case _ =>
-          if (innerHitsNames.contains(innerHitsName.getOrElse(""))) {
-            criteria.asFilter(currentQuery).query(innerHitsNames, currentQuery)
-          } else {
-            val boolQuery = Option(ElasticBoolQuery(group = true))
-            val filteredQuery = criteria.asFilter(boolQuery)
-            nestedQuery(
-              relationType.getOrElse(""),
-              filteredQuery
-                .query(innerHitsNames + innerHitsName.getOrElse(""), boolQuery)
-            ) /*.scoreMode(ScoreMode.None)*/
-              .inner(innerHits(innerHitsName.getOrElse("")))
-          }
+      if (innerHitsNames.contains(innerHitsName.getOrElse(""))) {
+        criteria.asFilter(currentQuery).query(innerHitsNames, currentQuery)
+      } else {
+        val boolQuery = Option(ElasticBoolQuery(group = true))
+        nestedQuery(
+          relationType.getOrElse(""),
+          criteria
+            .asFilter(boolQuery)
+            .query(innerHitsNames + innerHitsName.getOrElse(""), boolQuery)
+        ) /*.scoreMode(ScoreMode.None)*/
+          .inner(innerHits(innerHitsName.getOrElse("")))
       }
     }
   }

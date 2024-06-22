@@ -146,12 +146,16 @@ object ElasticQuery {
                 def _filtered: Aggregation = {
                   aggregation.filter match {
                     case Some(f) =>
+                      val boolQuery = Option(ElasticBoolQuery(group = true))
                       val filteredAgg = s"filtered_agg"
                       aggPath ++= Seq(filteredAgg)
                       filterAgg(
                         filteredAgg,
                         f.criteria
-                          .map(_.asFilter(None).query(Set(identifier.innerHitsName).flatten, None))
+                          .map(
+                            _.asFilter(boolQuery)
+                              .query(Set(identifier.innerHitsName).flatten, boolQuery)
+                          )
                           .getOrElse(matchAllQuery())
                       ) subaggs {
                         aggPath ++= Seq(agg)
