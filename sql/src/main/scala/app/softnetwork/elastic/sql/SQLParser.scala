@@ -266,46 +266,48 @@ object SQLParser extends RegexParsers {
   @tailrec
   private def processTokensHelper(
     tokens: List[SQLToken],
-    stack: List[SQLToken],
-    group: Boolean = false
+    stack: List[SQLToken]
   ): Option[SQLCriteria] = {
     tokens match {
       case Nil =>
         stack match {
           case (right: SQLCriteria) :: (op: SQLPredicateOperator) :: (left: SQLCriteria) :: Nil =>
             Option(
-              SQLPredicate(left, op, right, group = group)
+              SQLPredicate(left, op, right)
             )
           case _ =>
             stack.headOption.collect { case c: SQLCriteria => c }
         }
       case (_: StartDelimiter) :: rest =>
         val (subTokens, remainingTokens) = extractSubTokens(rest, 1)
-        val subCriteria = processSubTokens(subTokens)
+        val subCriteria = processSubTokens(subTokens) match {
+          case p: SQLPredicate => p.copy(group = true)
+          case c               => c
+        }
         processTokensHelper(remainingTokens, subCriteria :: stack)
       case (c: SQLCriteria) :: rest =>
         stack match {
           case (op: SQLPredicateOperator) :: (left: SQLCriteria) :: tail =>
-            val predicate = SQLPredicate(left, op, c, group = group)
+            val predicate = SQLPredicate(left, op, c)
             processTokensHelper(rest, predicate :: tail)
           case _ =>
-            processTokensHelper(rest, c :: stack, group = group)
+            processTokensHelper(rest, c :: stack)
         }
       case (op: SQLPredicateOperator) :: rest =>
         stack match {
           case (right: SQLCriteria) :: (left: SQLCriteria) :: tail =>
-            val predicate = SQLPredicate(left, op, right, group = group)
+            val predicate = SQLPredicate(left, op, right)
             processTokensHelper(rest, predicate :: tail)
           case (right: SQLCriteria) :: (o: SQLPredicateOperator) :: tail =>
             tail match {
               case (left: SQLCriteria) :: tt =>
-                val predicate = SQLPredicate(left, op, right, group = group)
+                val predicate = SQLPredicate(left, op, right)
                 processTokensHelper(rest, o :: predicate :: tt)
               case _ =>
                 processTokensHelper(rest, op :: stack)
             }
           case _ :: Nil =>
-            processTokensHelper(rest, op :: stack, group = group)
+            processTokensHelper(rest, op :: stack)
           case _ =>
             throw new IllegalStateException("Invalid stack state for predicate creation")
         }
@@ -333,7 +335,7 @@ object SQLParser extends RegexParsers {
     * @return
     */
   private def processSubTokens(tokens: List[SQLToken]): SQLCriteria = {
-    processTokensHelper(tokens, Nil, group = true).getOrElse(
+    processTokensHelper(tokens, Nil).getOrElse(
       throw new IllegalStateException("Empty sub-expression")
     )
   }
@@ -359,16 +361,7 @@ object SQLParser extends RegexParsers {
         extractSubTokens(rest, openCount + 1, start :: subTokens)
       case (end: EndDelimiter) :: rest =>
         if (openCount - 1 == 0) {
-          val reversedTokens = subTokens.reverse
-          if (reversedTokens.length > 1) {
-            (reversedTokens, rest)
-          } else {
-            val headToken = reversedTokens.head match {
-              case t: SQLPredicate => t.copy(group = true)
-              case t               => t
-            }
-            (headToken :: reversedTokens.tail, rest)
-          }
+          (subTokens.reverse, rest)
         } else extractSubTokens(rest, openCount - 1, end :: subTokens)
       case head :: rest => extractSubTokens(rest, openCount, head :: subTokens)
     }

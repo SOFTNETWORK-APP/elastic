@@ -516,19 +516,18 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |    lastName is not null AND
            |    description is not null AND
            |    preparationTime <= 120 AND
-           |    store.deliveryPeriods.dayOfWeek=6 AND (
+           |    store.deliveryPeriods.dayOfWeek=6 AND
+           |    blockedCustomers not like "uuid" AND
+           |    NOT receiptOfOrdersDisabled=true AND
+           |    (
            |      distance(pickup.location,(0.0,0.0)) <= "7000m" OR
            |      distance(withdrawals.location,(0.0,0.0)) <= "7000m"
            |    ) AND
            |    (
-           |      blockedCustomers not like "uuid" AND
-           |      NOT receiptOfOrdersDisabled=true
+           |      inner_products.deleted=false AND
+           |      inner_products.upForSale=true AND
+           |      inner_products.stock > 0
            |    )
-           |  ) AND
-           |  (
-           |    inner_products.deleted=false AND
-           |    inner_products.upForSale=true AND
-           |    inner_products.stock > 0
            |  ) AND
            |  (
            |    match(products.name, "lasagnes") OR
@@ -544,186 +543,162 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     result.query shouldBe
     """
         |{
-        | "query":{
-        |   "bool":{
-        |     "filter":[
-        |       {
-        |         "bool":{
-        |           "filter":[
-        |             {
-        |               "bool":{
-        |                 "filter":[
-        |                   {
-        |                     "bool":{
-        |                       "filter":[
-        |                         {
-        |                           "bool":{
-        |                             "filter":[
-        |                               {
-        |                                 "bool":{
-        |                                   "filter":[
-        |                                     {
-        |                                       "exists":{
-        |                                         "field":"firstName"
-        |                                       }
-        |                                     },
-        |                                     {
-        |                                       "exists":{
-        |                                         "field":"lastName"
-        |                                       }
-        |                                     },{
-        |                                       "exists":{
-        |                                         "field":"description"
-        |                                       }
-        |                                     },{
-        |                                       "range":{
-        |                                         "preparationTime":{
-        |                                           "lte":"120"
-        |                                         }
-        |                                       }
-        |                                     }
-        |                                   ]
-        |                                 }
-        |                               },
-        |                               {
-        |                                 "term":{
-        |                                   "deliveryPeriods.dayOfWeek":{
-        |                                     "value":"6"
-        |                                   }
-        |                                 }
-        |                               }
-        |                             ]
-        |                           }
-        |                         },
-        |                         {
-        |                           "bool":{
-        |                             "should":[
-        |                               {
-        |                                 "geo_distance":{
-        |                                   "distance":"7000m",
-        |                                   "pickup.location":[0.0,0.0]
-        |                                 }
-        |                               },
-        |                               {
-        |                                 "geo_distance":{
-        |                                   "distance":"7000m",
-        |                                   "withdrawals.location":[0.0,0.0]
-        |                                 }
-        |                               }
-        |                             ]
-        |                           }
-        |                         }
-        |                       ]
-        |                     }
-        |                   },
-        |                   {
-        |                     "bool":{
-        |                       "must_not":[
-        |                         {
-        |                           "term":{
-        |                             "receiptOfOrdersDisabled":{
-        |                               "value":true
-        |                             }
-        |                           }
-        |                         }
-        |                       ],
-        |                       "filter":[
-        |                         {
-        |                           "bool":{
-        |                             "must_not":[
-        |                               {
-        |                                 "regexp":{
-        |                                   "blockedCustomers":{
-        |                                     "value":"()uuid()"
-        |                                   }
-        |                                 }
-        |                               }
-        |                             ]
-        |                           }
-        |                         }
-        |                       ]
-        |                     }
-        |                   }
-        |                 ]
-        |               }
-        |             },
-        |             {
-        |               "nested":{
-        |                 "path":"products",
-        |                 "query":{
-        |                   "bool":{
-        |                     "filter":[
-        |                       {
-        |                         "term":{
-        |                           "products.deleted":{
-        |                             "value":false
-        |                           }
-        |                         }
-        |                       },
-        |                       {
-        |                         "term":{
-        |                           "products.upForSale":{
-        |                             "value":true
-        |                           }
-        |                         }
-        |                       },
-        |                       {
-        |                         "range":{
-        |                           "products.stock":{
-        |                             "gt":"0"
-        |                           }
-        |                         }
-        |                       }
-        |                     ]
-        |                   }
-        |                 },
-        |                 "inner_hits":{
-        |                   "name":"inner_products"
-        |                 }
-        |               }
-        |             }
-        |           ]
-        |         }
-        |       },
-        |       {
-        |         "bool":{
-        |           "should":[
-        |             {
-        |               "match":{
-        |                 "products.name":{
-        |                   "query":"lasagnes"
-        |                 }
-        |               }
-        |             },
-        |             {
-        |               "match":{
-        |                 "products.description":{
-        |                   "query":"lasagnes"
-        |                 }
-        |               }
-        |             },
-        |             {
-        |               "match":{
-        |                 "products.ingredients":{
-        |                   "query":"lasagnes"
-        |                 }
-        |               }
-        |             }
-        |           ]
-        |         }
-        |       }
-        |     ]
-        |   }
-        | },
-        | "from":0,
-        | "size":100,
-        | "_source":{
-        |   "includes":[
-        |     "inner_products.name",
-        |     "inner_products.category",
-        |     "inner_products.price"
-        |   ]
-        | }
+        |  "query": {
+        |    "bool": {
+        |      "filter": [
+        |        {
+        |          "bool": {
+        |            "filter": [
+        |              {
+        |                "exists": {
+        |                  "field": "firstName"
+        |                }
+        |              },
+        |              {
+        |                "exists": {
+        |                  "field": "lastName"
+        |                }
+        |              },
+        |              {
+        |                "exists": {
+        |                  "field": "description"
+        |                }
+        |              },
+        |              {
+        |                "range": {
+        |                  "preparationTime": {
+        |                    "lte": "120"
+        |                  }
+        |                }
+        |              },
+        |              {
+        |                "term": {
+        |                  "deliveryPeriods.dayOfWeek": {
+        |                    "value": "6"
+        |                  }
+        |                }
+        |              },
+        |              {
+        |                "bool": {
+        |                  "must_not": [
+        |                    {
+        |                      "regexp": {
+        |                        "blockedCustomers": {
+        |                          "value": "()uuid()"
+        |                        }
+        |                      }
+        |                    }
+        |                  ]
+        |                }
+        |              },
+        |              {
+        |                "term": {
+        |                  "receiptOfOrdersDisabled": {
+        |                    "value": true
+        |                  }
+        |                }
+        |              },
+        |              {
+        |                "bool": {
+        |                  "should": [
+        |                    {
+        |                      "geo_distance": {
+        |                        "distance": "7000m",
+        |                        "pickup.location": [
+        |                          0.0,
+        |                          0.0
+        |                        ]
+        |                      }
+        |                    },
+        |                    {
+        |                      "geo_distance": {
+        |                        "distance": "7000m",
+        |                        "withdrawals.location": [
+        |                          0.0,
+        |                          0.0
+        |                        ]
+        |                      }
+        |                    }
+        |                  ]
+        |                }
+        |              },
+        |              {
+        |                "nested": {
+        |                  "path": "products",
+        |                  "query": {
+        |                    "bool": {
+        |                      "filter": [
+        |                        {
+        |                          "term": {
+        |                            "products.deleted": {
+        |                              "value": false
+        |                            }
+        |                          }
+        |                        },
+        |                        {
+        |                          "term": {
+        |                            "products.upForSale": {
+        |                              "value": true
+        |                            }
+        |                          }
+        |                        },
+        |                        {
+        |                          "range": {
+        |                            "products.stock": {
+        |                              "gt": "0"
+        |                            }
+        |                          }
+        |                        }
+        |                      ]
+        |                    }
+        |                  },
+        |                  "inner_hits": {
+        |                    "name": "inner_products"
+        |                  }
+        |                }
+        |              }
+        |            ]
+        |          }
+        |        },
+        |        {
+        |          "bool": {
+        |            "should": [
+        |              {
+        |                "match": {
+        |                  "products.name": {
+        |                    "query": "lasagnes"
+        |                  }
+        |                }
+        |              },
+        |              {
+        |                "match": {
+        |                  "products.description": {
+        |                    "query": "lasagnes"
+        |                  }
+        |                }
+        |              },
+        |              {
+        |                "match": {
+        |                  "products.ingredients": {
+        |                    "query": "lasagnes"
+        |                  }
+        |                }
+        |              }
+        |            ]
+        |          }
+        |        }
+        |      ]
+        |    }
+        |  },
+        |  "from": 0,
+        |  "size": 100,
+        |  "_source": {
+        |    "includes": [
+        |      "inner_products.name",
+        |      "inner_products.category",
+        |      "inner_products.price"
+        |    ]
+        |  }
         |}""".stripMargin.replaceAll("\\s+", "")
   }
 
