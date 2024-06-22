@@ -21,25 +21,25 @@ object Queries {
   val literalLike = """select * from Table where identifier like "%un%""""
   val literalNotLike = """select * from Table where identifier not like "%un%""""
   val betweenExpression = """select * from Table where identifier between "1" and "2""""
-  val andPredicate = "select * from Table where (identifier1 = 1) and (identifier2 > 2)"
-  val orPredicate = "select * from Table where (identifier1 = 1) or (identifier2 > 2)"
+  val andPredicate = "select * from Table where identifier1 = 1 and identifier2 > 2"
+  val orPredicate = "select * from Table where identifier1 = 1 or identifier2 > 2"
   val leftPredicate =
-    "select * from Table where ((identifier1 = 1) and (identifier2 > 2)) or (identifier3 = 3)"
+    "select * from Table where (identifier1 = 1 and identifier2 > 2) or identifier3 = 3"
   val rightPredicate =
-    "select * from Table where (identifier1 = 1) and ((identifier2 > 2) or (identifier3 = 3))"
+    "select * from Table where identifier1 = 1 and (identifier2 > 2 or identifier3 = 3)"
   val predicates =
-    "select * from Table where ((identifier1 = 1) and (identifier2 > 2)) or ((identifier3 = 3) and (identifier4 = 4))"
+    "select * from Table where (identifier1 = 1 and identifier2 > 2) or (identifier3 = 3 and identifier4 = 4)"
   val nestedPredicate =
-    "select * from Table where (identifier1 = 1) and nested((nested.identifier2 > 2) or (nested.identifier3 = 3))"
+    "select * from Table where identifier1 = 1 and nested(nested.identifier2 > 2 or nested.identifier3 = 3)"
   val nestedCriteria =
-    "select * from Table where (identifier1 = 1) and nested(nested.identifier3 = 3)"
+    "select * from Table where identifier1 = 1 and nested(nested.identifier3 = 3)"
   val childPredicate =
-    "select * from Table where (identifier1 = 1) and child((child.identifier2 > 2) or (child.identifier3 = 3))"
-  val childCriteria = "select * from Table where (identifier1 = 1) and child(child.identifier3 = 3)"
+    "select * from Table where identifier1 = 1 and child(child.identifier2 > 2 or child.identifier3 = 3)"
+  val childCriteria = "select * from Table where identifier1 = 1 and child(child.identifier3 = 3)"
   val parentPredicate =
-    "select * from Table where (identifier1 = 1) and parent((parent.identifier2 > 2) or (parent.identifier3 = 3))"
+    "select * from Table where identifier1 = 1 and parent(parent.identifier2 > 2 or parent.identifier3 = 3)"
   val parentCriteria =
-    "select * from Table where (identifier1 = 1) and parent(parent.identifier3 = 3)"
+    "select * from Table where identifier1 = 1 and parent(parent.identifier3 = 3)"
   val inLiteralExpression = "select * from Table where identifier in (\"val1\",\"val2\",\"val3\")"
   val inNumericalExpressionWithIntValues = "select * from Table where identifier in (1,2,3)"
   val inNumericalExpressionWithDoubleValues =
@@ -50,7 +50,7 @@ object Queries {
   val notInNumericalExpressionWithDoubleValues =
     "select * from Table where identifier not in (1.0,2.1,3.4)"
   val nestedWithBetween =
-    "select * from Table where nested((ciblage.Archivage_CreationDate between \"now-3M/M\" and \"now\") and (ciblage.statutComportement = 1))"
+    "select * from Table where nested(ciblage.Archivage_CreationDate between \"now-3M/M\" and \"now\" and ciblage.statutComportement = 1)"
   val count = "select count(t.id) as c1 from Table as t where t.nom = \"Nom\""
   val countDistinct = "select count(distinct t.id) as c2 from Table as t where t.nom = \"Nom\""
   val countNested =

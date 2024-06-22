@@ -511,7 +511,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |  stores-dev store,
            |  UNNEST(store.products) as inner_products
            |WHERE
-           |  ((
+           |  (
            |    firstName is not null AND
            |    lastName is not null AND
            |    description is not null AND
@@ -529,7 +529,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |    inner_products.deleted=false AND
            |    inner_products.upForSale=true AND
            |    inner_products.stock > 0
-           |  )) AND
+           |  ) AND
            |  (
            |    match(products.name, "lasagnes") OR
            |    match(products.description, "lasagnes") OR
@@ -540,7 +540,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     )
     select.isDefined shouldBe true
     val result = select.get
-//    println(result.query)
+    println(result.query)
     result.query shouldBe
     """
         |{

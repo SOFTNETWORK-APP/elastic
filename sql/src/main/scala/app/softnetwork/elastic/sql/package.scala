@@ -579,18 +579,10 @@ package object sql {
     not: Option[NOT.type] = None,
     group: Boolean = false
   ) extends SQLCriteria {
-    val leftParentheses: Boolean = leftCriteria match {
-      case _: ElasticRelation => false
-      case _                  => true
-    }
-    val rightParentheses: Boolean = rightCriteria match {
-      case _: ElasticRelation => false
-      case _                  => true
-    }
-    override def sql = s"${if (leftParentheses) s"(${leftCriteria.sql})"
+    override def sql = s"${if (group) s"(${leftCriteria.sql}"
     else leftCriteria.sql} ${operator.sql}${not
       .map(_ => " not")
-      .getOrElse("")} ${if (rightParentheses) s"(${rightCriteria.sql})" else rightCriteria.sql}"
+      .getOrElse("")} ${if (group) s"${rightCriteria.sql})" else rightCriteria.sql}"
     override def update(query: SQLSelectQuery): SQLCriteria = {
       val updatedPredicate = this.copy(
         leftCriteria = leftCriteria.update(query),

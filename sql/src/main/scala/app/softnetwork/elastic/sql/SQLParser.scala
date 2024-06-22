@@ -7,7 +7,6 @@ import scala.util.parsing.combinator.RegexParsers
   * SQL Parser for ElasticSearch
   *
   * TODO implements SQL :
-  *   - MATCH,
   *   - UNION,
   *   - JOIN,
   *   - GROUP BY,
@@ -203,7 +202,7 @@ object SQLParser extends RegexParsers {
     nestedCriteria | childCriteria | parentCriteria | criteria
 
   def whereCriteria: SQLParser.Parser[List[SQLToken]] = rep1(
-    predicate | criteria | start | or | and | end
+    allPredicate | allCriteria | start | or | and | end
   )
 
   def where: Parser[SQLWhere] = _where ~ whereCriteria ^^ { case _ ~ rawTokens =>
@@ -359,7 +358,19 @@ object SQLParser extends RegexParsers {
       case (start: StartDelimiter) :: rest =>
         extractSubTokens(rest, openCount + 1, start :: subTokens)
       case (end: EndDelimiter) :: rest =>
-        if (openCount - 1 == 0) (subTokens.reverse, rest)
+        if (openCount - 1 == 0) {
+          val reversedTokens = subTokens.reverse
+          if(reversedTokens.length > 1){
+            (reversedTokens, rest)
+          }
+          else{
+            val headToken = reversedTokens.head match {
+              case t: SQLPredicate => t.copy(group = true)
+              case t => t
+            }
+            (headToken :: reversedTokens.tail, rest)
+          }
+        }
         else extractSubTokens(rest, openCount - 1, end :: subTokens)
       case head :: rest => extractSubTokens(rest, openCount, head :: subTokens)
     }

@@ -18,7 +18,9 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
     import SQLImplicits._
     val criteria: Option[SQLCriteria] = sql
     val result = SearchBodyBuilderFn(
-      SearchRequest("*") query criteria.map(_.filter(None).query(currentQuery = None)).getOrElse(matchAllQuery())
+      SearchRequest("*") query criteria
+        .map(_.filter(None).query(currentQuery = None))
+        .getOrElse(matchAllQuery())
     ).string()
     println(result)
     result
@@ -188,7 +190,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
     filter(andPredicate) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "filter" : [
         |        {
         |          "term" : {
@@ -207,14 +209,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter or predicate" in {
     filter(orPredicate) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "should" : [
         |        {
         |          "term" : {
@@ -233,14 +235,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter left predicate with criteria" in {
     filter(leftPredicate) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "should" : [
         |        {
         |          "bool" : {
@@ -272,14 +274,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter right predicate with criteria" in {
     filter(rightPredicate) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "filter" : [
         |        {
         |          "term" : {
@@ -311,14 +313,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter multiple predicates" in {
     filter(predicates) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "should" : [
         |        {
         |          "bool" : {
@@ -363,7 +365,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter in literal expression" in {
@@ -415,7 +417,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
     filter(nestedPredicate) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "filter" : [
         |        {
         |          "term" : {
@@ -453,14 +455,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter nested criteria" in {
     filter(nestedCriteria) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "filter" : [
         |        {
         |          "term" : {
@@ -485,14 +487,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter child predicate" in {
     filter(childPredicate) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "filter" : [
         |        {
         |          "term" : {
@@ -530,14 +532,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter child criteria" in {
     filter(childCriteria) shouldBe """{
 
         |"query":{
-        |   "bool":{"filter":[{ "bool" : {
+        |   "bool":{
         |      "filter" : [
         |        {
         |          "term" : {
@@ -562,14 +564,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter parent predicate" in {
     filter(parentPredicate) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "filter" : [
         |        {
         |          "term" : {
@@ -606,14 +608,14 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter parent criteria" in {
     filter(parentCriteria) shouldBe """{
 
         |"query":{
-        |    "bool":{"filter":[{"bool" : {
+        |    "bool":{
         |      "filter" : [
         |        {
         |          "term" : {
@@ -637,7 +639,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}""".stripMargin.replaceAll("\\s", "")
   }
 
   it should "filter nested with between" in {
@@ -751,7 +753,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
 
   it should "filter match criteria" in {
     filter(matchCriteria) shouldBe
-      """{
+    """{
         | "query":{
         |   "bool":{
         |     "filter":[
@@ -774,25 +776,26 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |where (identifier is not null and identifier = 1) or
         |(
         | (identifier is null or identifier2 > 2)
-        | and (identifier3 = 3)
+        | and identifier3 = 3
         |)""".stripMargin
-    filter(query) shouldBe """{
-
-        |"query":{
-        |    "bool":{"filter":[{"bool" : {
-        |      "should" : [
+    filter(query) shouldBe
+    """
+        |{
+        |  "query": {
+        |    "bool": {
+        |      "should": [
         |        {
-        |          "bool" : {
-        |            "filter" : [
+        |          "bool": {
+        |            "filter": [
         |              {
-        |                "exists" : {
-        |                  "field" : "identifier"
+        |                "exists": {
+        |                  "field": "identifier"
         |                }
         |              },
         |              {
-        |                "term" : {
-        |                  "identifier" : {
-        |                    "value" : "1"
+        |                "term": {
+        |                  "identifier": {
+        |                    "value": "1"
         |                  }
         |                }
         |              }
@@ -800,26 +803,26 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |          }
         |        },
         |        {
-        |          "bool" : {
-        |            "filter" : [
+        |          "bool": {
+        |            "filter": [
         |              {
-        |                "bool" : {
-        |                  "should" : [
+        |                "bool": {
+        |                  "should": [
         |                    {
-        |                      "bool" : {
-        |                        "must_not" : [
+        |                      "bool": {
+        |                        "must_not": [
         |                          {
-        |                            "exists" : {
-        |                              "field" : "identifier"
+        |                            "exists": {
+        |                              "field": "identifier"
         |                            }
         |                          }
         |                        ]
         |                      }
         |                    },
         |                    {
-        |                      "range" : {
-        |                        "identifier2" : {
-        |                          "gt" : "2"
+        |                      "range": {
+        |                        "identifier2": {
+        |                          "gt": "2"
         |                        }
         |                      }
         |                    }
@@ -827,9 +830,9 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |                }
         |              },
         |              {
-        |                "term" : {
-        |                  "identifier3" : {
-        |                    "value" : "3"
+        |                "term": {
+        |                  "identifier3": {
+        |                    "value": "3"
         |                  }
         |                }
         |              }
@@ -839,7 +842,8 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |      ]
         |    }
         |  }
-        |]}}}""".stripMargin.replaceAll("\\s", "")
+        |}
+        |""".stripMargin.replaceAll("\\s", "")
   }
 
 }
