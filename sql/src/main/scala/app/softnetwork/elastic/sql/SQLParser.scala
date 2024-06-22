@@ -360,18 +360,16 @@ object SQLParser extends RegexParsers {
       case (end: EndDelimiter) :: rest =>
         if (openCount - 1 == 0) {
           val reversedTokens = subTokens.reverse
-          if(reversedTokens.length > 1){
+          if (reversedTokens.length > 1) {
             (reversedTokens, rest)
-          }
-          else{
+          } else {
             val headToken = reversedTokens.head match {
               case t: SQLPredicate => t.copy(group = true)
-              case t => t
+              case t               => t
             }
             (headToken :: reversedTokens.tail, rest)
           }
-        }
-        else extractSubTokens(rest, openCount - 1, end :: subTokens)
+        } else extractSubTokens(rest, openCount - 1, end :: subTokens)
       case head :: rest => extractSubTokens(rest, openCount, head :: subTokens)
     }
   }
