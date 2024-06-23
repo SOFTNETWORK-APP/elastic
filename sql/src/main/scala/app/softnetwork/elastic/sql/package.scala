@@ -231,10 +231,14 @@ package object sql {
     var mustFilters: Seq[ElasticFilter] = Nil,
     var notFilters: Seq[ElasticFilter] = Nil,
     var shouldFilters: Seq[ElasticFilter] = Nil,
-    group: Boolean = false
+    group: Boolean = false,
+    filtered: Boolean = true,
+    matchCriteria: Boolean = false
   ) extends ElasticFilter {
     def filter(filter: ElasticFilter): ElasticBoolQuery = {
-      if (filter != this)
+      if (!filtered) {
+        must(filter)
+      } else if (filter != this)
         innerFilters = filter +: innerFilters
       this
     }
@@ -250,6 +254,7 @@ package object sql {
         notFilters = filter +: notFilters
       this
     }
+
     def should(filter: ElasticFilter): ElasticBoolQuery = {
       if (filter != this)
         shouldFilters = filter +: shouldFilters
@@ -269,6 +274,23 @@ package object sql {
         .filter(innerFilters.map(_.query(innerHitsNames, currentQuery)))
     }
 
+    def unfilteredMatchCriteria(): ElasticBoolQuery = {
+      val query = ElasticBoolQuery().copy(
+        mustFilters = this.mustFilters,
+        notFilters = this.notFilters,
+        shouldFilters = this.shouldFilters
+      )
+      innerFilters.reverse.map {
+        case b: ElasticBoolQuery if b.matchCriteria =>
+          b.innerFilters.reverse.foreach(query.must)
+          b.mustFilters.reverse.foreach(query.must)
+          b.notFilters.reverse.foreach(query.not)
+          b.shouldFilters.reverse.foreach(query.should)
+        case filter => query.filter(filter)
+      }
+      query
+    }
+
   }
 
   sealed trait SQLCriteria extends SQLToken {
@@ -280,20 +302,27 @@ package object sql {
 
     def group: Boolean
 
-    lazy val boolQuery: ElasticBoolQuery = ElasticBoolQuery()
+    def matchCriteria: Boolean = false
+
+    lazy val boolQuery: ElasticBoolQuery =
+      ElasticBoolQuery(group = group, matchCriteria = matchCriteria)
 
     def asFilter(currentQuery: Option[ElasticBoolQuery]): ElasticFilter
 
     def asBoolQuery(currentQuery: Option[ElasticBoolQuery]): ElasticBoolQuery = {
       currentQuery match {
         case Some(q) if q.group && !group => q
-        case _                            => boolQuery
+        case Some(q)                      => boolQuery.copy(filtered = q.filtered && !matchCriteria)
+        case _                            => boolQuery // FIXME should never be the case
       }
     }
 
-    def filter(currentQuery: Option[ElasticBoolQuery]): ElasticBoolQuery = {
-      val query = asBoolQuery(currentQuery)
-      query.filter(this.asFilter(Option(query)))
+    def asQuery(group: Boolean = true, innerHitsNames: Set[String] = Set.empty): Query = {
+      val query = boolQuery.copy(group = group)
+      query
+        .filter(this.asFilter(Option(query)))
+        .unfilteredMatchCriteria()
+        .query(innerHitsNames, Option(query))
     }
 
   }
@@ -604,8 +633,6 @@ package object sql {
       case _                => criteria
     }
 
-    override lazy val boolQuery: ElasticBoolQuery = ElasticBoolQuery(group = group)
-
     override def asFilter(currentQuery: Option[ElasticBoolQuery]): ElasticFilter = {
       val query = asBoolQuery(currentQuery)
       operator match {
@@ -623,6 +650,8 @@ package object sql {
     }
 
     override def nested: Boolean = leftCriteria.nested && rightCriteria.nested
+
+    override def matchCriteria: Boolean = leftCriteria.matchCriteria || rightCriteria.matchCriteria
   }
 
   sealed trait ElasticOperator extends SQLOperator
@@ -699,7 +728,8 @@ package object sql {
     ): Query =
       hasChildQuery(
         relationType.getOrElse(""),
-        criteria.asFilter(currentQuery).query(innerHitsNames, currentQuery)
+//        criteria.asFilter(currentQuery).query(innerHitsNames, currentQuery),
+        criteria.asQuery(group = group, innerHitsNames = innerHitsNames)
       )
   }
 
@@ -714,7 +744,8 @@ package object sql {
     ): Query =
       hasParentQuery(
         relationType.getOrElse(""),
-        criteria.asFilter(currentQuery).query(innerHitsNames, currentQuery),
+//        criteria.asFilter(currentQuery).query(innerHitsNames, currentQuery),
+        criteria.asQuery(group = group, innerHitsNames = innerHitsNames),
         score = false
       )
   }
@@ -807,6 +838,8 @@ package object sql {
     ): Query = {
       matchQuery(identifier.columnName, value.value)
     }
+
+    override def matchCriteria: Boolean = true
   }
 
   case class SQLExcept(fields: Seq[SQLField]) extends SQLToken {
@@ -874,6 +907,10 @@ package object sql {
     }
     def update(query: SQLSelectQuery): SQLWhere =
       this.copy(criteria = criteria.map(_.update(query)))
+
+    def asQuery(group: Boolean = true, innerHitsNames: Set[String] = Set.empty): Query = criteria
+      .map(_.asQuery(group = group, innerHitsNames = innerHitsNames))
+      .getOrElse(matchAllQuery)
   }
 
   case class SQLFilter(criteria: Option[SQLCriteria]) extends SQLToken {
@@ -898,6 +935,15 @@ package object sql {
       val updated = this.copy(from = from.update(this))
       updated.copy(select = select.update(updated), where = where.map(_.update(updated)))
     }
+
+    lazy val fields: Seq[String] = select.fields.map(_.sourceField)
+
+    lazy val excludes: Seq[String] = select.except.map(_.fields.map(_.sourceField)).getOrElse(Nil)
+
+    lazy val sources: Seq[String] = from.tables.collect { case SQLTable(source: SQLIdentifier, _) =>
+      source.sql
+    }
+
   }
 
   class SQLSelectAggregatesQuery(

@@ -488,13 +488,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     """
         |{
         | "query":{
-        |   "bool":{
-        |     "filter":[
-        |       {
-        |         "match_all":{}
-        |       }
-        |     ]
-        |   }
+        |   "match_all":{}
         | },
         | "_source":{
         |   "excludes":["col1","col2"]
@@ -530,9 +524,11 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |    )
            |  ) AND
            |  (
-           |    match(products.name, "lasagnes") OR
-           |    match(products.description, "lasagnes") OR
-           |    match(products.ingredients, "lasagnes")
+           |    match(products.name, "lasagnes") AND
+           |    (
+           |      match(products.description, "lasagnes") OR
+           |      match(products.ingredients, "lasagnes")
+           |    )
            |  )
            |LIMIT 100""".stripMargin
       )
@@ -545,6 +541,35 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |{
         |  "query": {
         |    "bool": {
+        |      "must": [
+        |        {
+        |          "match": {
+        |            "products.name": {
+        |              "query": "lasagnes"
+        |            }
+        |          }
+        |        },
+        |        {
+        |          "bool": {
+        |            "should": [
+        |              {
+        |                "match": {
+        |                  "products.description": {
+        |                    "query": "lasagnes"
+        |                  }
+        |                }
+        |              },
+        |              {
+        |                "match": {
+        |                  "products.ingredients": {
+        |                    "query": "lasagnes"
+        |                  }
+        |                }
+        |              }
+        |            ]
+        |          }
+        |        }
+        |      ],
         |      "filter": [
         |        {
         |          "bool": {
@@ -654,33 +679,6 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |                  },
         |                  "inner_hits": {
         |                    "name": "inner_products"
-        |                  }
-        |                }
-        |              }
-        |            ]
-        |          }
-        |        },
-        |        {
-        |          "bool": {
-        |            "should": [
-        |              {
-        |                "match": {
-        |                  "products.name": {
-        |                    "query": "lasagnes"
-        |                  }
-        |                }
-        |              },
-        |              {
-        |                "match": {
-        |                  "products.description": {
-        |                    "query": "lasagnes"
-        |                  }
-        |                }
-        |              },
-        |              {
-        |                "match": {
-        |                  "products.ingredients": {
-        |                    "query": "lasagnes"
         |                  }
         |                }
         |              }

@@ -19,36 +19,15 @@ object ElasticQuery {
     select match {
 
       case Some(s) =>
-        val criteria = s.where match {
-          case Some(w) => w.criteria
-          case _       => None
-        }
-
-        val fields = s.select.fields.map(_.sourceField)
-
-        val excludes = s.select.except.map(_.fields.map(_.sourceField))
-
-        val sources = s.from.tables.collect { case SQLTable(source: SQLIdentifier, _) =>
-          source.sql
-        }
-
-        val queryFiltered = criteria
-          .map { c =>
-            val boolQuery = Option(c.boolQuery)
-            c.filter(boolQuery).query(Set.empty, boolQuery)
-          }
-          .getOrElse(matchAllQuery) /*filter(criteria)*/ match {
-          case b: BoolQuery => b
-          case q: Query     => boolQuery().filter(q)
-        }
-
         var _search: SearchRequest = search("") query {
-          queryFiltered
-        } sourceInclude fields
+          s.where.map(_.asQuery()).getOrElse(matchAllQuery)
+        } sourceInclude s.fields
+
+        val excludes = s.excludes
 
         excludes match {
-          case Some(e) => _search = _search sourceExclude e
-          case _       => ()
+          case Nil =>
+          case _   => _search = _search sourceExclude excludes
         }
 
         _search = s.limit match {
@@ -60,7 +39,7 @@ object ElasticQuery {
           ElasticSelect(
             s.select.fields,
             s.select.except,
-            sources,
+            s.sources,
             s.where.flatMap(_.criteria),
             s.limit.map(_.limit),
             _search
@@ -82,9 +61,6 @@ object ElasticQuery {
         val criteria = s.where match {
           case Some(w) => w.criteria
           case _       => None
-        }
-        val sources = s.from.tables.collect { case SQLTable(source: SQLIdentifier, _) =>
-          source.sql
         }
         s.selectAggregates.aggregates.map((aggregation: SQLAggregate) => {
           val identifier = aggregation.identifier
@@ -109,15 +85,7 @@ object ElasticQuery {
 
           var aggPath = Seq[String]()
 
-          val queryFiltered = criteria
-            .map { c =>
-              val boolQuery = Option(c.boolQuery)
-              c.filter(boolQuery).query(Set.empty, boolQuery)
-            }
-            .getOrElse(matchAllQuery) /*filter(criteria)*/ match {
-            case b: BoolQuery => b
-            case q: Query     => boolQuery().filter(q)
-          }
+          val queryFiltered = criteria.map(_.asQuery()).getOrElse(matchAllQuery)
 
           val q = {
             aggregation.function match {
@@ -193,7 +161,7 @@ object ElasticQuery {
             aggPath.mkString("."),
             field,
             sourceField,
-            sources,
+            s.sources,
             q.replace("\"version\":true,", ""), /*FIXME*/
             distinct,
             identifier.nested,
