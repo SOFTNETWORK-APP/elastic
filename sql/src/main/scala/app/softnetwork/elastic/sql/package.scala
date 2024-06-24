@@ -1,6 +1,8 @@
 package app.softnetwork.elastic
 
-import com.sksamuel.elastic4s.ElasticApi._
+import com.sksamuel.elastic4s.ElasticApi.{search, _}
+import com.sksamuel.elastic4s.searches.SearchRequest
+import com.sksamuel.elastic4s.searches.aggs.Aggregation
 import com.sksamuel.elastic4s.searches.queries.Query
 
 import java.util.regex.Pattern
@@ -857,6 +859,84 @@ package object sql {
     override def sql: String = s"${function.sql}(${identifier.sql})${asString(alias)}"
     override def update(query: SQLSelectQuery): SQLAggregate =
       new SQLAggregate(function, identifier.update(query), alias, filter.map(_.update(query)))
+
+    def asAggregation(): ElasticAggregation = {
+      val sourceField = identifier.columnName
+
+      val field = alias match {
+        case Some(alias) => alias.alias
+        case _           => sourceField
+      }
+
+      val distinct = identifier.distinct.isDefined
+
+      val agg =
+        if (distinct)
+          s"${function.sql}_distinct_${sourceField.replace(".", "_")}"
+        else
+          s"${function.sql}_${sourceField.replace(".", "_")}"
+
+      var aggPath = Seq[String]()
+
+      val _agg =
+        function match {
+          case Count =>
+            if (distinct)
+              cardinalityAgg(agg, sourceField)
+            else {
+              valueCountAgg(agg, sourceField)
+            }
+          case Min => minAgg(agg, sourceField)
+          case Max => maxAgg(agg, sourceField)
+          case Avg => avgAgg(agg, sourceField)
+          case Sum => sumAgg(agg, sourceField)
+        }
+
+      def _filtered: Aggregation = filter match {
+        case Some(f) =>
+          val boolQuery = Option(ElasticBoolQuery(group = true))
+          val filteredAgg = s"filtered_agg"
+          aggPath ++= Seq(filteredAgg)
+          filterAgg(
+            filteredAgg,
+            f.criteria
+              .map(
+                _.asFilter(boolQuery)
+                  .query(Set(identifier.innerHitsName).flatten, boolQuery)
+              )
+              .getOrElse(matchAllQuery())
+          ) subaggs {
+            aggPath ++= Seq(agg)
+            _agg
+          }
+        case _ =>
+          aggPath ++= Seq(agg)
+          _agg
+      }
+
+      val aggregation =
+        if (identifier.nested) {
+          val path = sourceField.split("\\.").head
+          val nestedAgg = s"nested_$agg"
+          aggPath ++= Seq(nestedAgg)
+          nestedAggregation(nestedAgg, path) subaggs {
+            _filtered
+          }
+        } else {
+          _filtered
+        }
+
+      ElasticAggregation(
+        aggPath.mkString("."),
+        field,
+        sourceField,
+        distinct = distinct,
+        nested = identifier.nested,
+        filtered = filter.nonEmpty,
+        aggType = function,
+        agg = Some(aggregation)
+      )
+    }
   }
 
   case class SQLSelect(
@@ -936,7 +1016,17 @@ package object sql {
       updated.copy(select = select.update(updated), where = where.map(_.update(updated)))
     }
 
-    lazy val fields: Seq[String] = select.fields.map(_.sourceField)
+    lazy val fields: Seq[String] =
+      select.fields
+        .filterNot {
+          case _: SQLAggregate => true
+          case _               => false
+        }
+        .map(_.sourceField)
+
+    lazy val aggregates: Seq[SQLAggregate] = select.fields.collect { case a: SQLAggregate => a }
+
+    lazy val aggregations: Seq[ElasticAggregation] = aggregates.map(_.asAggregation())
 
     lazy val excludes: Seq[String] = select.except.map(_.fields.map(_.sourceField)).getOrElse(Nil)
 
@@ -944,6 +1034,30 @@ package object sql {
       source.sql
     }
 
+    lazy val searchRequest: SearchRequest = {
+      var _search: SearchRequest = search("") query {
+        where.map(_.asQuery()).getOrElse(matchAllQuery)
+      } sourceInclude fields
+
+      _search = excludes match {
+        case Nil      => _search
+        case excludes => _search sourceExclude excludes
+      }
+
+      _search = aggregations match {
+        case Nil => _search
+        case _   => _search aggregations { aggregations.flatMap(_.agg) }
+      }
+
+      if (aggregations.nonEmpty && fields.isEmpty) {
+        _search size 0
+      } else {
+        limit match {
+          case Some(l) => _search limit l.limit from 0
+          case _       => _search
+        }
+      }
+    }
   }
 
   class SQLSelectAggregatesQuery(

@@ -179,7 +179,7 @@ object SQLParser extends RegexParsers {
       new SQLSelectAggregates(aggregates)
   }
 
-  def select: Parser[SQLSelect] = _select ~ rep1sep(field, separator) ~ except.? ^^ {
+  def select: Parser[SQLSelect] = _select ~ rep1sep(aggregate | field, separator) ~ except.? ^^ {
     case _ ~ fields ~ e =>
       SQLSelect(fields, e)
   }

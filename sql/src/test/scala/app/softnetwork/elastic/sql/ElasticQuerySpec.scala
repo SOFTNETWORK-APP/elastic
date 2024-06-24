@@ -18,10 +18,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe false
     result.distinct shouldBe false
-    result.aggName shouldBe "agg_id"
+    result.aggName shouldBe "count_id"
     result.field shouldBe "c2"
     result.sources shouldBe Seq[String]("Table")
-    result.query shouldBe
+    result.query.getOrElse("") shouldBe
     """|{
         |  "query": {
         |    "bool": {
@@ -38,7 +38,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |  },
         |  "size": 0,
         |  "aggs": {
-        |    "agg_id": {
+        |    "count_id": {
         |      "value_count": {
         |        "field": "id"
         |      }
@@ -55,10 +55,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe false
     result.distinct shouldBe true
-    result.aggName shouldBe "agg_distinct_id"
+    result.aggName shouldBe "count_distinct_id"
     result.field shouldBe "c2"
     result.sources shouldBe Seq[String]("Table")
-    result.query shouldBe
+    result.query.getOrElse("") shouldBe
     """|{
         |  "query": {
         |    "bool": {
@@ -75,7 +75,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |  },
         |  "size": 0,
         |  "aggs": {
-        |    "agg_distinct_id": {
+        |    "count_distinct_id": {
         |      "cardinality": {
         |        "field": "id"
         |      }
@@ -94,10 +94,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe false
-    result.aggName shouldBe "nested_emails.agg_emails_value"
+    result.aggName shouldBe "nested_count_emails_value.count_emails_value"
     result.field shouldBe "email"
     result.sources shouldBe Seq[String]("index")
-    result.query shouldBe
+    result.query.getOrElse("") shouldBe
     """{
         |  "query": {
         |    "bool": {
@@ -114,12 +114,12 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |  },
         |  "size": 0,
         |  "aggs": {
-        |    "nested_emails": {
+        |    "nested_count_emails_value": {
         |      "nested": {
         |        "path": "emails"
         |      },
         |      "aggs": {
-        |        "agg_emails_value": {
+        |        "count_emails_value": {
         |          "value_count": {
         |            "field": "emails.value"
         |          }
@@ -140,10 +140,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe false
-    result.aggName shouldBe "nested_emails.agg_emails_value"
+    result.aggName shouldBe "nested_count_emails_value.count_emails_value"
     result.field shouldBe "count_emails"
     result.sources shouldBe Seq[String]("index")
-    result.query shouldBe
+    result.query.getOrElse("") shouldBe
     """{
         |  "query": {
         |    "bool":{
@@ -174,12 +174,12 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |  },
         |  "size": 0,
         |  "aggs": {
-        |    "nested_emails": {
+        |    "nested_count_emails_value": {
         |      "nested": {
         |        "path": "emails"
         |      },
         |      "aggs": {
-        |        "agg_emails_value": {
+        |        "count_emails_value": {
         |          "value_count": {
         |            "field": "emails.value"
         |          }
@@ -200,10 +200,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe false
-    result.aggName shouldBe "nested_emails.filtered_agg.agg_emails_value"
+    result.aggName shouldBe "nested_count_emails_value.filtered_agg.count_emails_value"
     result.field shouldBe "count_emails"
     result.sources shouldBe Seq[String]("index")
-    result.query shouldBe
+    result.query.getOrElse("") shouldBe
     """{
         |  "query": {
         |    "bool":{
@@ -234,7 +234,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |  },
         |  "size": 0,
         |  "aggs": {
-        |    "nested_emails": {
+        |    "nested_count_emails_value": {
         |      "nested": {
         |        "path": "emails"
         |      },
@@ -248,7 +248,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |            }
         |          },
         |          "aggs": {
-        |            "agg_emails_value": {
+        |            "count_emails_value": {
         |              "value_count": {
         |                "field": "emails.value"
         |              }
@@ -271,10 +271,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe true
-    result.aggName shouldBe "nested_emails.agg_distinct_emails_value"
+    result.aggName shouldBe "nested_count_distinct_emails_value.count_distinct_emails_value"
     result.field shouldBe "count_emails"
     result.sources shouldBe Seq[String]("index")
-    result.query shouldBe
+    result.query.getOrElse("") shouldBe
     """
         |{
         |  "query": {
@@ -319,12 +319,12 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |  },
         |  "size": 0,
         |  "aggs": {
-        |    "nested_emails": {
+        |    "nested_count_distinct_emails_value": {
         |      "nested": {
         |        "path": "emails"
         |      },
         |      "aggs": {
-        |        "agg_distinct_emails_value": {
+        |        "count_distinct_emails_value": {
         |          "cardinality": {
         |            "field": "emails.value"
         |          }
@@ -346,10 +346,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val result = results.head
     result.nested shouldBe true
     result.distinct shouldBe true
-    result.aggName shouldBe "nested_emails.agg_distinct_emails_value"
+    result.aggName shouldBe "nested_count_distinct_emails_value.count_distinct_emails_value"
     result.field shouldBe "count_distinct_emails"
     result.sources shouldBe Seq[String]("index")
-    result.query shouldBe
+    result.query.getOrElse("") shouldBe
     """{
     "query": {
       |        "bool": {
@@ -387,12 +387,12 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
       |    },
       |    "size": 0,
       |    "aggs": {
-      |        "nested_emails": {
+      |        "nested_count_distinct_emails_value": {
       |            "nested": {
       |                "path": "emails"
       |            },
       |            "aggs": {
-      |                "agg_distinct_emails_value": {
+      |                "count_distinct_emails_value": {
       |                    "cardinality": {
       |                        "field": "emails.value"
       |                    }
@@ -500,7 +500,11 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
     val select = ElasticQuery.select(
       SQLQuery(
         s"""SELECT
-           |  inner_products.name, inner_products.category, inner_products.price
+           |  inner_products.name,
+           |  inner_products.category,
+           |  inner_products.price,
+           |  min(inner_products.price) as min_price,
+           |  max(inner_products.price) as max_price
            |FROM
            |  stores-dev store,
            |  UNNEST(store.products) as inner_products
@@ -696,6 +700,32 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |      "inner_products.category",
         |      "inner_products.price"
         |    ]
+        |  },
+        |  "aggs": {
+        |    "nested_min_products_price": {
+        |      "nested": {
+        |        "path": "products"
+        |      },
+        |      "aggs": {
+        |        "min_products_price": {
+        |          "min": {
+        |            "field": "products.price"
+        |          }
+        |        }
+        |      }
+        |    },
+        |    "nested_max_products_price": {
+        |      "nested": {
+        |        "path": "products"
+        |      },
+        |      "aggs": {
+        |        "max_products_price": {
+        |          "max": {
+        |            "field": "products.price"
+        |          }
+        |        }
+        |      }
+        |    }
         |  }
         |}""".stripMargin.replaceAll("\\s+", "")
   }
