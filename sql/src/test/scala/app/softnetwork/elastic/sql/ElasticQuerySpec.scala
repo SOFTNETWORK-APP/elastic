@@ -621,10 +621,16 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |                }
         |              },
         |              {
-        |                "term": {
-        |                  "receiptOfOrdersDisabled": {
-        |                    "value": true
-        |                  }
+        |                "bool": {
+        |                  "must_not": [
+        |                    {
+        |                      "term": {
+        |                        "receiptOfOrdersDisabled": {
+        |                          "value": true
+        |                        }
+        |                      }
+        |                    }
+        |                  ]
         |                }
         |              },
         |              {

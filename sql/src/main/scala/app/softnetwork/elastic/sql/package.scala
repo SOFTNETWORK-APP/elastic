@@ -461,9 +461,19 @@ package object sql {
         case b: SQLBoolean =>
           operator match {
             case _: EQ.type =>
-              termQuery(identifier.columnName, b.value)
+              maybeNot match {
+                case Some(_) =>
+                  not(termQuery(identifier.columnName, b.value))
+                case _ =>
+                  termQuery(identifier.columnName, b.value)
+              }
             case _: NE.type =>
-              not(termQuery(identifier.columnName, b.value))
+              maybeNot match {
+                case Some(_) =>
+                  termQuery(identifier.columnName, b.value)
+                case _ =>
+                  not(termQuery(identifier.columnName, b.value))
+              }
             case _ => matchAllQuery
           }
         case _ => matchAllQuery
