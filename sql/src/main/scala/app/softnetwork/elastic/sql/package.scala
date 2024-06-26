@@ -4,6 +4,7 @@ import com.sksamuel.elastic4s.ElasticApi.{search, _}
 import com.sksamuel.elastic4s.searches.SearchRequest
 import com.sksamuel.elastic4s.searches.aggs.Aggregation
 import com.sksamuel.elastic4s.searches.queries.Query
+import com.sksamuel.elastic4s.searches.sort.FieldSort
 
 import java.util.regex.Pattern
 import scala.reflect.runtime.universe._
@@ -35,13 +36,19 @@ package object sql {
   case object WHERE extends SQLExpr("where")
   case object LIMIT extends SQLExpr("limit")
 
+  case object ORDER_BY extends SQLExpr("order by")
+  sealed trait SortOrder extends SQLToken
+  case object DESC extends SQLExpr("desc") with SortOrder
+  case object ASC extends SQLExpr("asc") with SortOrder
+
   case class SQLLimit(limit: Int) extends SQLExpr(s"limit $limit")
 
   case class SQLIdentifier(
     columnName: String,
     alias: Option[String] = None,
     distinct: Option[String] = None,
-    nested: Boolean = false
+    nested: Boolean = false,
+    limit: Option[SQLLimit] = None
   ) extends SQLExpr({
         var parts: Seq[String] = columnName.split("\\.").toSeq
         alias match {
@@ -64,7 +71,8 @@ package object sql {
             this.copy(
               alias = Some(parts.head),
               columnName = s"${tuple._2}.${parts.tail.mkString(".")}",
-              nested = true
+              nested = true,
+              limit = tuple._3
             )
           case _ =>
             this.copy(
@@ -300,6 +308,8 @@ package object sql {
 
     def nested: Boolean = false
 
+    def limit: Option[SQLLimit] = None
+
     def update(query: SQLSelectQuery): SQLCriteria
 
     def group: Boolean
@@ -333,6 +343,7 @@ package object sql {
     def identifier: SQLIdentifier
     override def nested: Boolean = identifier.nested
     override def group: Boolean = false
+    override lazy val limit: Option[SQLLimit] = identifier.limit
   }
 
   case class SQLExpression(
@@ -347,7 +358,7 @@ package object sql {
     override def update(query: SQLSelectQuery): SQLCriteria = {
       val updated = this.copy(identifier = identifier.update(query))
       if (updated.nested) {
-        ElasticNested(updated)
+        ElasticNested(updated, limit)
       } else
         updated
     }
@@ -489,7 +500,7 @@ package object sql {
     override def update(query: SQLSelectQuery): SQLCriteria = {
       val updated = this.copy(identifier = identifier.update(query))
       if (updated.nested) {
-        ElasticNested(updated)
+        ElasticNested(updated, limit)
       } else
         updated
     }
@@ -512,7 +523,7 @@ package object sql {
     override def update(query: SQLSelectQuery): SQLCriteria = {
       val updated = this.copy(identifier = identifier.update(query))
       if (updated.nested) {
-        ElasticNested(updated)
+        ElasticNested(updated, limit)
       } else
         updated
     }
@@ -539,7 +550,7 @@ package object sql {
     override def update(query: SQLSelectQuery): SQLCriteria = {
       val updated = this.copy(identifier = identifier.update(query))
       if (updated.nested) {
-        ElasticNested(updated)
+        ElasticNested(updated, limit)
       } else
         updated
     }
@@ -576,7 +587,7 @@ package object sql {
     override def update(query: SQLSelectQuery): SQLCriteria = {
       val updated = this.copy(identifier = identifier.update(query))
       if (updated.nested) {
-        ElasticNested(updated)
+        ElasticNested(updated, limit)
       } else
         updated
     }
@@ -630,10 +641,13 @@ package object sql {
         rightCriteria = rightCriteria.update(query)
       )
       if (updatedPredicate.nested) {
-        ElasticNested(unnest(updatedPredicate))
+        val unnested = unnest(updatedPredicate)
+        ElasticNested(unnested, unnested.limit)
       } else
         updatedPredicate
     }
+
+    override lazy val limit: Option[SQLLimit] = leftCriteria.limit.orElse(rightCriteria.limit)
 
     private[this] def unnest(criteria: SQLCriteria): SQLCriteria = criteria match {
       case p: SQLPredicate =>
@@ -693,7 +707,7 @@ package object sql {
 
   }
 
-  case class ElasticNested(override val criteria: SQLCriteria)
+  case class ElasticNested(override val criteria: SQLCriteria, override val limit: Option[SQLLimit])
       extends ElasticRelation(criteria, NESTED) {
     override def update(query: SQLSelectQuery): ElasticNested =
       this.copy(criteria = criteria.update(query))
@@ -724,7 +738,9 @@ package object sql {
             .asFilter(boolQuery)
             .query(innerHitsNames + innerHitsName.getOrElse(""), boolQuery)
         ) /*.scoreMode(ScoreMode.None)*/
-          .inner(innerHits(innerHitsName.getOrElse("")))
+          .inner(
+            innerHits(innerHitsName.getOrElse("")).from(0).size(limit.map(_.limit).getOrElse(3))
+          )
       }
     }
   }
@@ -971,7 +987,7 @@ package object sql {
     def update(query: SQLSelectQuery): SQLSource
   }
 
-  case class SQLUnnest(identifier: SQLIdentifier) extends SQLSource {
+  case class SQLUnnest(identifier: SQLIdentifier, limit: Option[SQLLimit]) extends SQLSource {
     override def sql: String = s"unnest(${identifier /*.copy(distinct = None)*/ .sql})"
     def update(query: SQLSelectQuery): SQLUnnest = this.copy(identifier = identifier.update(query))
   }
@@ -984,8 +1000,9 @@ package object sql {
   case class SQLFrom(tables: Seq[SQLTable]) extends SQLToken {
     override def sql: String = s" $FROM ${tables.map(_.sql).mkString(",")}"
     lazy val aliases: Seq[String] = tables.flatMap((table: SQLTable) => table.alias).map(_.alias)
-    lazy val unnests: Seq[(String, String)] = tables.collect { case SQLTable(u: SQLUnnest, a) =>
-      (a.map(_.alias).getOrElse(u.identifier.columnName), u.identifier.columnName)
+    lazy val unnests: Seq[(String, String, Option[SQLLimit])] = tables.collect {
+      case SQLTable(u: SQLUnnest, a) =>
+        (a.map(_.alias).getOrElse(u.identifier.columnName), u.identifier.columnName, u.limit)
     }
     def update(query: SQLSelectQuery): SQLFrom = this.copy(tables = tables.map(_.update(query)))
   }
@@ -1012,15 +1029,24 @@ package object sql {
       this.copy(criteria = criteria.map(_.update(query)))
   }
 
+  case class SQLFieldSort(field: String, order: Option[SortOrder]) extends SQLToken {
+    override def sql: String = s"$field ${order.getOrElse(ASC).sql}"
+  }
+
+  case class SQLOrderBy(sorts: Seq[SQLFieldSort]) extends SQLToken {
+    override def sql: String = s" $ORDER_BY ${sorts.map(_.sql).mkString(",")}"
+  }
+
   case class SQLSelectQuery(
     select: SQLSelect = SQLSelect(),
     from: SQLFrom,
     where: Option[SQLWhere],
+    orderBy: Option[SQLOrderBy] = None,
     limit: Option[SQLLimit] = None
   ) extends SQLToken {
     override def sql: String = s"${select.sql}${from.sql}${asString(where)}${asString(limit)}"
     lazy val aliases: Seq[String] = from.aliases
-    lazy val unnests: Seq[(String, String)] = from.unnests
+    lazy val unnests: Seq[(String, String, Option[SQLLimit])] = from.unnests
     def update(): SQLSelectQuery = {
       val updated = this.copy(from = from.update(this))
       updated.copy(select = select.update(updated), where = where.map(_.update(updated)))
@@ -1059,6 +1085,17 @@ package object sql {
         case _   => _search aggregations { aggregations.flatMap(_.agg) }
       }
 
+      _search = orderBy match {
+        case Some(o) =>
+          _search sortBy o.sorts.map(sort =>
+            sort.order match {
+              case Some(DESC) => FieldSort(sort.field).desc()
+              case _          => FieldSort(sort.field).asc()
+            }
+          )
+        case _ => _search
+      }
+
       if (aggregations.nonEmpty && fields.isEmpty) {
         _search size 0
       } else {
@@ -1074,12 +1111,14 @@ package object sql {
     val selectAggregates: SQLSelectAggregates,
     from: SQLFrom,
     where: Option[SQLWhere],
+    orderBy: Option[SQLOrderBy] = None,
     limit: Option[SQLLimit] = None
-  ) extends SQLSelectQuery(selectAggregates, from, where, limit) {
+  ) extends SQLSelectQuery(selectAggregates, from, where, orderBy, limit) {
     def withFrom(from: SQLFrom): SQLSelectAggregatesQuery = new SQLSelectAggregatesQuery(
       selectAggregates,
       from,
       where,
+      orderBy,
       limit
     )
     override def update(): SQLSelectAggregatesQuery = {
@@ -1088,6 +1127,7 @@ package object sql {
         selectAggregates.update(updated),
         updated.from,
         where.map(_.update(updated)),
+        orderBy,
         limit
       )
     }

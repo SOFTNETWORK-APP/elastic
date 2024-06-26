@@ -446,7 +446,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |                ]
         |              }
         |            },
-        |            "inner_hits":{"name":"nested"}
+        |            "inner_hits":{"name":"nested","from":0,"size":3}
         |          }
         |        }
         |      ]
@@ -478,7 +478,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |                }
         |              }
         |            },
-        |            "inner_hits":{"name":"nested"}
+        |            "inner_hits":{"name":"nested","from":0,"size":3}
         |          }
         |        }
         |      ]
@@ -694,7 +694,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
         |          ]
         |        }
         |      },
-        |      "inner_hits":{"name":"ciblage"}
+        |      "inner_hits":{"name":"ciblage","from":0,"size":3}
         |    }
         |  }
         |]}}}""".stripMargin.replaceAll("\\s", "")

@@ -16,10 +16,12 @@ import scala.util.parsing.combinator.RegexParsers
 object SQLParser extends RegexParsers {
 
   val regexAlias =
-    """\b(?!(?i)except\b)\b(?!(?i)where\b)\b(?!(?i)filter\b)\b(?!(?i)from\b)[a-zA-Z0-9_]*"""
+    """\b(?!(?i)except\b)\b(?!(?i)where\b)\b(?!(?i)filter\b)\b(?!(?i)from\b)\b(?!(?i)order\b)[a-zA-Z0-9_]*"""
+
+  val regexIdentifier = """[\*a-zA-Z_\-][a-zA-Z0-9_\-\.\[\]\*]*"""
 
   def identifier: Parser[SQLIdentifier] =
-    "(?i)distinct".r.? ~ """[\*a-zA-Z_\-][a-zA-Z0-9_\-\.\[\]\*]*""".r ^^ { case d ~ str =>
+    "(?i)distinct".r.? ~ regexIdentifier.r ^^ { case d ~ str =>
       SQLIdentifier(
         str,
         None,
@@ -113,10 +115,10 @@ object SQLParser extends RegexParsers {
   }
 
   def nestedCriteria: Parser[ElasticRelation] = nested ~ start.? ~ criteria ~ end.? ^^ {
-    case _ ~ _ ~ c ~ _ => ElasticNested(c)
+    case _ ~ _ ~ c ~ _ => ElasticNested(c, None)
   }
   def nestedPredicate: Parser[ElasticRelation] = nested ~ start ~ predicate ~ end ^^ {
-    case _ ~ _ ~ p ~ _ => ElasticNested(p)
+    case _ ~ _ ~ p ~ _ => ElasticNested(p, None)
   }
 
   def childCriteria: Parser[ElasticRelation] = child ~ start.? ~ criteria ~ end.? ^^ {
@@ -154,8 +156,8 @@ object SQLParser extends RegexParsers {
   def filter: Parser[SQLFilter] = _filter ~> "[" ~> whereCriteria <~ "]" ^^ { case rawTokens =>
     SQLFilter(
       processTokens(rawTokens) match {
-        case Some(c) => Some(c)
-        case _       => None
+        case (Some(c), _) => Some(c)
+        case _            => None
       }
     )
   }
@@ -184,9 +186,9 @@ object SQLParser extends RegexParsers {
       SQLSelect(fields, e)
   }
 
-  def unnest: Parser[SQLTable] = "(?i)unnest".r ~ start ~ identifier ~ end ~ alias ^^ {
-    case _ ~ _ ~ i ~ _ ~ a =>
-      SQLTable(SQLUnnest(i), Some(a))
+  def unnest: Parser[SQLTable] = "(?i)unnest".r ~ start ~ identifier ~ limit.? ~ end ~ alias ^^ {
+    case _ ~ _ ~ i ~ l ~ _ ~ a =>
+      SQLTable(SQLUnnest(i, l), Some(a))
   }
 
   def table: Parser[SQLTable] = identifier ~ alias.? ^^ { case i ~ a => SQLTable(i, a) }
@@ -198,15 +200,30 @@ object SQLParser extends RegexParsers {
   def allPredicate: SQLParser.Parser[SQLCriteria] =
     nestedPredicate | childPredicate | parentPredicate | predicate
 
-  def allCriteria: SQLParser.Parser[SQLCriteria] =
-    nestedCriteria | childCriteria | parentCriteria | criteria
+  def allCriteria: SQLParser.Parser[SQLToken] =
+    orderBy | nestedCriteria | childCriteria | parentCriteria | criteria
 
   def whereCriteria: SQLParser.Parser[List[SQLToken]] = rep1(
     allPredicate | allCriteria | start | or | and | end
   )
 
-  def where: Parser[SQLWhere] = _where ~ whereCriteria ^^ { case _ ~ rawTokens =>
-    SQLWhere(processTokens(rawTokens))
+  def where: Parser[(SQLWhere, Option[SQLOrderBy])] = _where ~ whereCriteria ^^ {
+    case _ ~ rawTokens =>
+      val tuple = processTokens(rawTokens)
+      (SQLWhere(tuple._1), tuple._2)
+  }
+
+  def asc: Parser[ASC.type] = "(?i)asc".r ^^ (_ => ASC)
+
+  def desc: Parser[DESC.type] = "(?i)desc".r ^^ (_ => DESC)
+
+  def sort: Parser[SQLFieldSort] =
+    """\b(?!(?i)limit\b)[a-zA-Z_][a-zA-Z0-9_]*""".r ~ (asc | desc).? ^^ { case f ~ o =>
+      SQLFieldSort(f, o)
+    }
+
+  def orderBy: Parser[SQLOrderBy] = "(?i)order by".r ~ rep1sep(sort, separator) ^^ { case _ ~ s =>
+    SQLOrderBy(s)
   }
 
   def limit: SQLParser.Parser[SQLLimit] = _limit ~ int ^^ { case _ ~ i => SQLLimit(i.value) }
@@ -214,8 +231,9 @@ object SQLParser extends RegexParsers {
   def tokens: Parser[_ <: SQLSelectQuery] = {
     phrase((selectAggregates | select) ~ from ~ where.? ~ limit.?) ^^ { case s ~ f ~ w ~ l =>
       s match {
-        case x: SQLSelectAggregates => new SQLSelectAggregatesQuery(x, f, w, l)
-        case _                      => SQLSelectQuery(s, f, w, l)
+        case x: SQLSelectAggregates =>
+          new SQLSelectAggregatesQuery(x, f, w.map(_._1), w.flatMap(_._2), l)
+        case _ => SQLSelectQuery(s, f, w.map(_._1), w.flatMap(_._2), l)
       }
     }
   }
@@ -266,17 +284,21 @@ object SQLParser extends RegexParsers {
   @tailrec
   private def processTokensHelper(
     tokens: List[SQLToken],
-    stack: List[SQLToken]
-  ): Option[SQLCriteria] = {
+    stack: List[SQLToken],
+    orderBy: Option[SQLOrderBy] = None
+  ): (Option[SQLCriteria], Option[SQLOrderBy]) = {
     tokens match {
       case Nil =>
         stack match {
           case (right: SQLCriteria) :: (op: SQLPredicateOperator) :: (left: SQLCriteria) :: Nil =>
-            Option(
-              SQLPredicate(left, op, right)
+            (
+              Option(
+                SQLPredicate(left, op, right)
+              ),
+              orderBy
             )
           case _ =>
-            stack.headOption.collect { case c: SQLCriteria => c }
+            (stack.headOption.collect { case c: SQLCriteria => c }, orderBy)
         }
       case (_: StartDelimiter) :: rest =>
         val (subTokens, remainingTokens) = extractSubTokens(rest, 1)
@@ -313,6 +335,8 @@ object SQLParser extends RegexParsers {
         }
       case (_: EndDelimiter) :: rest =>
         processTokensHelper(rest, stack) // Ignore and move on
+      case (orderBy: SQLOrderBy) :: rest =>
+        processTokensHelper(rest, stack, Some(orderBy))
       case _ => throw new IllegalStateException("Unexpected token type")
     }
   }
@@ -323,7 +347,7 @@ object SQLParser extends RegexParsers {
     * @param tokens
     * @return
     */
-  private def processTokens(tokens: List[SQLToken]): Option[SQLCriteria] = {
+  private def processTokens(tokens: List[SQLToken]): (Option[SQLCriteria], Option[SQLOrderBy]) = {
     processTokensHelper(tokens, Nil)
   }
 
@@ -335,7 +359,7 @@ object SQLParser extends RegexParsers {
     * @return
     */
   private def processSubTokens(tokens: List[SQLToken]): SQLCriteria = {
-    processTokensHelper(tokens, Nil).getOrElse(
+    processTokensHelper(tokens, Nil)._1.getOrElse(
       throw new IllegalStateException("Empty sub-expression")
     )
   }

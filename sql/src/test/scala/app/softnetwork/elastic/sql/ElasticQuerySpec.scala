@@ -166,7 +166,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |                  ]
         |                }
         |              },
-        |              "inner_hits":{"name":"inner_profiles"}
+        |              "inner_hits":{"name":"inner_profiles","from":0,"size":3}
         |            }
         |          }
         |      ]
@@ -226,7 +226,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |                ]
         |              }
         |            },
-        |            "inner_hits":{"name":"inner_profiles"}
+        |            "inner_hits":{"name":"inner_profiles","from":0,"size":3}
         |          }
         |        }
         |      ]
@@ -310,7 +310,9 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |              }
         |            },
         |            "inner_hits": {
-        |              "name": "inner_profiles"
+        |              "name": "inner_profiles",
+        |              "from": 0,
+        |              "size": 3
         |            }
         |          }
         |        }
@@ -378,7 +380,9 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
       |                            }
       |                        },
       |                        "inner_hits": {
-      |                            "name": "inner_profiles"
+      |                            "name": "inner_profiles",
+      |                            "from": 0,
+      |                            "size": 3
       |                        }
       |                    }
       |                }
@@ -453,7 +457,9 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
       |                            }
       |                        },
       |                        "inner_hits": {
-      |                            "name": "profile_ccm"
+      |                            "name": "profile_ccm",
+      |                            "from": 0,
+      |                            "size": 3
       |                        }
       |                    }
       |                }
@@ -506,8 +512,8 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |  min(inner_products.price) as min_price,
            |  max(inner_products.price) as max_price
            |FROM
-           |  stores-dev store,
-           |  UNNEST(store.products) as inner_products
+           |  stores store,
+           |  UNNEST(store.products LIMIT 10) as inner_products
            |WHERE
            |  (
            |    firstName is not null AND
@@ -534,6 +540,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |      match(products.ingredients, "lasagnes")
            |    )
            |  )
+           |ORDER BY preparationTime ASC, nbOrders DESC
            |LIMIT 100""".stripMargin
       )
     )
@@ -688,7 +695,9 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |                    }
         |                  },
         |                  "inner_hits": {
-        |                    "name": "inner_products"
+        |                    "name": "inner_products",
+        |                    "from": 0,
+        |                    "size": 10
         |                  }
         |                }
         |              }
@@ -700,6 +709,18 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |  },
         |  "from": 0,
         |  "size": 100,
+        |  "sort": [
+        |    {
+        |      "preparationTime": {
+        |        "order": "asc"
+        |      }
+        |    },
+        |    {
+        |      "nbOrders": {
+        |        "order": "desc"
+        |      }
+        |    }
+        |  ],
         |  "_source": {
         |    "includes": [
         |      "inner_products.name",
