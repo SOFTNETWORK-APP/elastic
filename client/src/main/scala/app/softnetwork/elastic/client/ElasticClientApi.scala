@@ -8,7 +8,7 @@ import _root_.akka.stream.{FlowShape, Materializer}
 import akka.stream.scaladsl._
 import app.softnetwork.persistence.model.Timestamped
 import app.softnetwork.serialization._
-import app.softnetwork.elastic.sql.{SQLQueries, SQLQuery}
+import app.softnetwork.elastic.sql.SQLQuery
 import com.typesafe.config.{Config, ConfigFactory}
 import org.json4s.{DefaultFormats, Formats}
 import org.json4s.jackson.JsonMethods._
@@ -504,14 +504,14 @@ trait SearchApi {
   ): List[(U, List[I])]
 
   def multiSearch[U](
-    sqlQueries: SQLQueries
+    sqlQuery: SQLQuery
   )(implicit m: Manifest[U], formats: Formats): List[List[U]]
 
   def multiSearch[U](
     jsonQueries: JSONQueries
   )(implicit m: Manifest[U], formats: Formats): List[List[U]]
 
-  def multiSearchWithInnerHits[U, I](sqlQueries: SQLQueries, innerField: String)(implicit
+  def multiSearchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
     formats: Formats

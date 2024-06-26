@@ -11,9 +11,8 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   import scala.language.implicitConversions
 
   "ElasticQuery" should "perform native count" in {
-    val results = ElasticQuery.aggregate(
-      SQLQuery("select count(t.id) c2 from Table t where t.nom = \"Nom\"")
-    )
+    val results =
+      SQLQuery("select count(t.id) c2 from Table t where t.nom = \"Nom\"").aggregations
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe false
@@ -48,9 +47,8 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform count distinct" in {
-    val results = ElasticQuery.aggregate(
-      SQLQuery("select count(distinct t.id) as c2 from Table as t where nom = \"Nom\"")
-    )
+    val results =
+      SQLQuery("select count(distinct t.id) as c2 from Table as t where nom = \"Nom\"").aggregations
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe false
@@ -85,11 +83,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested count" in {
-    val results = ElasticQuery.aggregate(
+    val results =
       SQLQuery(
         "select count(inner_emails.value) as email from index i, unnest(emails) as inner_emails where i.nom = \"Nom\""
-      )
-    )
+      ).aggregations
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe true
@@ -131,11 +128,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested count with nested criteria" in {
-    val results = ElasticQuery.aggregate(
+    val results =
       SQLQuery(
         "select count(inner_emails.value) as count_emails from index, unnest(emails) as inner_emails, unnest(profiles) as inner_profiles where nom = \"Nom\" and (inner_profiles.postalCode in (\"75001\",\"75002\"))"
-      )
-    )
+      ).aggregations
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe true
@@ -191,11 +187,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested count with filter" in {
-    val results = ElasticQuery.aggregate(
+    val results =
       SQLQuery(
         "select count(inner_emails.value) as count_emails filter[inner_emails.context = \"profile\"] from index, unnest(emails) as inner_emails, unnest(profiles) as inner_profiles where nom = \"Nom\" and (inner_profiles.postalCode in (\"75001\",\"75002\"))"
-      )
-    )
+      ).aggregations
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe true
@@ -262,11 +257,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested count with \"and not\" operator" in {
-    val results = ElasticQuery.aggregate(
+    val results =
       SQLQuery(
         "select count(distinct inner_emails.value) as count_emails from index, unnest(emails) as inner_emails, unnest(profiles) as inner_profiles where ((inner_profiles.postalCode = \"33600\") and (inner_profiles.postalCode <> \"75001\"))"
-      )
-    )
+      ).aggregations
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe true
@@ -339,11 +333,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested count with date filtering" in {
-    val results = ElasticQuery.aggregate(
+    val results =
       SQLQuery(
         "select count(distinct inner_emails.value) as count_distinct_emails from index, unnest(emails) as inner_emails, unnest(profiles) as inner_profiles where inner_profiles.postalCode = \"33600\" and inner_profiles.createdDate <= \"now-35M/M\""
-      )
-    )
+      ).aggregations
     results.size shouldBe 1
     val result = results.head
     result.nested shouldBe true
@@ -408,7 +401,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform nested select" in {
-    val select = ElasticQuery.select(
+    val select =
       SQLQuery("""
         |SELECT
         |profileId,
@@ -423,8 +416,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |((profile_ccm.postalCode BETWEEN "10" AND "99999")
         |AND
         |(profile_ccm.birthYear <= 2000))
-        |limit 100""".stripMargin)
-    )
+        |limit 100""".stripMargin).search
     select.isDefined shouldBe true
     val result = select.get
     result.query shouldBe
@@ -483,11 +475,10 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "exclude fields from select" in {
-    val select = ElasticQuery.select(
+    val select =
       SQLQuery(
         except
-      )
-    )
+      ).search
     select.isDefined shouldBe true
     val result = select.get
     result.query shouldBe
@@ -503,7 +494,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
   }
 
   it should "perform complex query" in {
-    val select = ElasticQuery.select(
+    val select =
       SQLQuery(
         s"""SELECT
            |  inner_products.name,
@@ -521,7 +512,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |    description is not null AND
            |    preparationTime <= 120 AND
            |    store.deliveryPeriods.dayOfWeek=6 AND
-           |    blockedCustomers not like "uuid" AND
+           |    blockedCustomers not like "%uuid%" AND
            |    NOT receiptOfOrdersDisabled=true AND
            |    (
            |      distance(pickup.location,(0.0,0.0)) <= "7000m" OR
@@ -542,8 +533,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |  )
            |ORDER BY preparationTime ASC, nbOrders DESC
            |LIMIT 100""".stripMargin
-      )
-    )
+      ).search
     select.isDefined shouldBe true
     val result = select.get
     println(result.query)
@@ -620,7 +610,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |                    {
         |                      "regexp": {
         |                        "blockedCustomers": {
-        |                          "value": "()uuid()"
+        |                          "value": ".*?uuid.*?"
         |                        }
         |                      }
         |                    }

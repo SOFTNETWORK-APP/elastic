@@ -71,217 +71,217 @@ class SQLParserSpec extends AnyFlatSpec with Matchers {
 
   "SQLParser" should "parse numerical eq" in {
     val result = SQLParser(numericalEq)
-    result.right.get.sql should ===(numericalEq)
+    result.right.get.left.get.sql should ===(numericalEq)
   }
 
   it should "parse numerical ne" in {
     val result = SQLParser(numericalNe)
-    result.right.get.sql should ===(numericalNe)
+    result.right.get.left.get.sql should ===(numericalNe)
   }
 
   it should "parse numerical lt" in {
     val result = SQLParser(numericalLt)
-    result.right.get.sql should ===(numericalLt)
+    result.right.get.left.get.sql should ===(numericalLt)
   }
 
   it should "parse numerical le" in {
     val result = SQLParser(numericalLe)
-    result.right.get.sql should ===(numericalLe)
+    result.right.get.left.get.sql should ===(numericalLe)
   }
 
   it should "parse numerical gt" in {
     val result = SQLParser(numericalGt)
-    result.right.get.sql should ===(numericalGt)
+    result.right.get.left.get.sql should ===(numericalGt)
   }
 
   it should "parse numerical ge" in {
     val result = SQLParser(numericalGe)
-    result.right.get.sql should ===(numericalGe)
+    result.right.get.left.get.sql should ===(numericalGe)
   }
 
   it should "parse literal eq" in {
     val result = SQLParser(literalEq)
-    result.right.get.sql should ===(literalEq)
+    result.right.get.left.get.sql should ===(literalEq)
   }
 
   it should "parse literal like" in {
     val result = SQLParser(literalLike)
-    result.right.get.sql should ===(literalLike)
+    result.right.get.left.get.sql should ===(literalLike)
   }
 
   it should "parse literal not like" in {
     val result = SQLParser(literalNotLike)
-    result.right.get.sql should ===(literalNotLike)
+    result.right.get.left.get.sql should ===(literalNotLike)
   }
 
   it should "parse literal ne" in {
     val result = SQLParser(literalNe)
-    result.right.get.sql should ===(literalNe)
+    result.right.get.left.get.sql should ===(literalNe)
   }
 
   it should "parse literal lt" in {
     val result = SQLParser(literalLt)
-    result.right.get.sql should ===(literalLt)
+    result.right.get.left.get.sql should ===(literalLt)
   }
 
   it should "parse literal le" in {
     val result = SQLParser(literalLe)
-    result.right.get.sql should ===(literalLe)
+    result.right.get.left.get.sql should ===(literalLe)
   }
 
   it should "parse literal gt" in {
     val result = SQLParser(literalGt)
-    result.right.get.sql should ===(literalGt)
+    result.right.get.left.get.sql should ===(literalGt)
   }
 
   it should "parse literal ge" in {
     val result = SQLParser(literalGe)
-    result.right.get.sql should ===(literalGe)
+    result.right.get.left.get.sql should ===(literalGe)
   }
 
   it should "parse boolean eq" in {
     val result = SQLParser(boolEq)
-    result.right.get.sql should ===(boolEq)
+    result.right.get.left.get.sql should ===(boolEq)
   }
 
   it should "parse boolean ne" in {
     val result = SQLParser(boolNe)
-    result.right.get.sql should ===(boolNe)
+    result.right.get.left.get.sql should ===(boolNe)
   }
 
   it should "parse between" in {
     val result = SQLParser(betweenExpression)
-    result.right.get.sql should ===(betweenExpression)
+    result.right.get.left.get.sql should ===(betweenExpression)
   }
 
   it should "parse and predicate" in {
     val result = SQLParser(andPredicate)
-    result.right.get.sql should ===(andPredicate)
+    result.right.get.left.get.sql should ===(andPredicate)
   }
 
   it should "parse or predicate" in {
     val result = SQLParser(orPredicate)
-    result.right.get.sql should ===(orPredicate)
+    result.right.get.left.get.sql should ===(orPredicate)
   }
 
   it should "parse left predicate with criteria" in {
     val result = SQLParser(leftPredicate)
-    result.right.get.sql should ===(leftPredicate)
+    result.right.get.left.get.sql should ===(leftPredicate)
   }
 
   it should "parse right predicate with criteria" in {
     val result = SQLParser(rightPredicate)
-    result.right.get.sql should ===(rightPredicate)
+    result.right.get.left.get.sql should ===(rightPredicate)
   }
 
   it should "parse multiple predicates" in {
     val result = SQLParser(predicates)
-    result.right.get.sql should ===(predicates)
+    result.right.get.left.get.sql should ===(predicates)
   }
 
   it should "parse nested predicate" in {
     val result = SQLParser(nestedPredicate)
-    result.right.get.sql should ===(nestedPredicate)
+    result.right.get.left.get.sql should ===(nestedPredicate)
   }
 
   it should "parse nested criteria" in {
     val result = SQLParser(nestedCriteria)
-    result.right.get.sql should ===(nestedCriteria)
+    result.right.get.left.get.sql should ===(nestedCriteria)
   }
 
   it should "parse child predicate" in {
     val result = SQLParser(childPredicate)
-    result.right.get.sql should ===(childPredicate)
+    result.right.get.left.get.sql should ===(childPredicate)
   }
 
   it should "parse child criteria" in {
     val result = SQLParser(childCriteria)
-    result.right.get.sql should ===(childCriteria)
+    result.right.get.left.get.sql should ===(childCriteria)
   }
 
   it should "parse parent predicate" in {
     val result = SQLParser(parentPredicate)
-    result.right.get.sql should ===(parentPredicate)
+    result.right.get.left.get.sql should ===(parentPredicate)
   }
 
   it should "parse parent criteria" in {
     val result = SQLParser(parentCriteria)
-    result.right.get.sql should ===(parentCriteria)
+    result.right.get.left.get.sql should ===(parentCriteria)
   }
 
   it should "parse in literal expression" in {
     val result = SQLParser(inLiteralExpression)
-    result.right.get.sql should ===(inLiteralExpression)
+    result.right.get.left.get.sql should ===(inLiteralExpression)
   }
 
   it should "parse in numerical expression with Int values" in {
     val result = SQLParser(inNumericalExpressionWithIntValues)
-    result.right.get.sql should ===(inNumericalExpressionWithIntValues)
+    result.right.get.left.get.sql should ===(inNumericalExpressionWithIntValues)
   }
 
   it should "parse in numerical expression with Double values" in {
     val result = SQLParser(inNumericalExpressionWithDoubleValues)
-    result.right.get.sql should ===(inNumericalExpressionWithDoubleValues)
+    result.right.get.left.get.sql should ===(inNumericalExpressionWithDoubleValues)
   }
 
   it should "parse not in literal expression" in {
     val result = SQLParser(notInLiteralExpression)
-    result.right.get.sql should ===(notInLiteralExpression)
+    result.right.get.left.get.sql should ===(notInLiteralExpression)
   }
 
   it should "parse not in numerical expression with Int values" in {
     val result = SQLParser(notInNumericalExpressionWithIntValues)
-    result.right.get.sql should ===(notInNumericalExpressionWithIntValues)
+    result.right.get.left.get.sql should ===(notInNumericalExpressionWithIntValues)
   }
 
   it should "parse not in numerical expression with Double values" in {
     val result = SQLParser(notInNumericalExpressionWithDoubleValues)
-    result.right.get.sql should ===(notInNumericalExpressionWithDoubleValues)
+    result.right.get.left.get.sql should ===(notInNumericalExpressionWithDoubleValues)
   }
 
   it should "parse nested with between" in {
     val result = SQLParser(nestedWithBetween)
-    result.right.get.sql should ===(nestedWithBetween)
+    result.right.get.left.get.sql should ===(nestedWithBetween)
   }
 
   it should "parse count" in {
     val result = SQLParser(count)
-    result.right.get.sql should ===(count)
+    result.right.get.left.get.sql should ===(count)
   }
 
   it should "parse distinct count" in {
     val result = SQLParser(countDistinct)
-    result.right.get.sql should ===(countDistinct)
+    result.right.get.left.get.sql should ===(countDistinct)
   }
 
   it should "parse count with nested criteria" in {
     val result = SQLParser(countNested)
-    result.right.get.sql should ===(countNested)
+    result.right.get.left.get.sql should ===(countNested)
   }
 
   it should "parse is null" in {
     val result = SQLParser(isNull)
-    result.right.get.sql should ===(isNull)
+    result.right.get.left.get.sql should ===(isNull)
   }
 
   it should "parse is not null" in {
     val result = SQLParser(isNotNull)
-    result.right.get.sql should ===(isNotNull)
+    result.right.get.left.get.sql should ===(isNotNull)
   }
 
   it should "parse geo distance criteria" in {
     val result = SQLParser(geoDistanceCriteria)
-    result.right.get.sql should ===(geoDistanceCriteria)
+    result.right.get.left.get.sql should ===(geoDistanceCriteria)
   }
 
   it should "parse except fields" in {
     val result = SQLParser(except)
-    result.right.get.sql should ===(except)
+    result.right.get.left.get.sql should ===(except)
   }
 
   it should "parse match criteria" in {
     val result = SQLParser(matchCriteria)
-    result.right.get.sql should ===(matchCriteria)
+    result.right.get.left.get.sql should ===(matchCriteria)
   }
 
 }

@@ -7,10 +7,8 @@ import scala.util.parsing.combinator.RegexParsers
   * SQL Parser for ElasticSearch
   *
   * TODO implements SQL :
-  *   - UNION,
   *   - JOIN,
   *   - GROUP BY,
-  *   - ORDER BY,
   *   - HAVING, etc.
   */
 object SQLParser extends RegexParsers {
@@ -176,11 +174,6 @@ object SQLParser extends RegexParsers {
       case agg ~ _ ~ i ~ _ ~ a ~ f => new SQLAggregate(agg, i, a, f)
     }
 
-  def selectAggregates: Parser[SQLSelect] = _select ~ rep1sep(aggregate, separator) ^^ {
-    case _ ~ aggregates =>
-      new SQLSelectAggregates(aggregates)
-  }
-
   def select: Parser[SQLSelect] = _select ~ rep1sep(aggregate | field, separator) ~ except.? ^^ {
     case _ ~ fields ~ e =>
       SQLSelect(fields, e)
@@ -228,22 +221,28 @@ object SQLParser extends RegexParsers {
 
   def limit: SQLParser.Parser[SQLLimit] = _limit ~ int ^^ { case _ ~ i => SQLLimit(i.value) }
 
-  def tokens: Parser[_ <: SQLSelectQuery] = {
-    phrase((selectAggregates | select) ~ from ~ where.? ~ limit.?) ^^ { case s ~ f ~ w ~ l =>
-      s match {
-        case x: SQLSelectAggregates =>
-          new SQLSelectAggregatesQuery(x, f, w.map(_._1), w.flatMap(_._2), l)
-        case _ => SQLSelectQuery(s, f, w.map(_._1), w.flatMap(_._2), l)
-      }
+  def request: Parser[SQLSearchRequest] = {
+    phrase(select ~ from ~ where.? ~ limit.?) ^^ { case s ~ f ~ w ~ l =>
+      SQLSearchRequest(s, f, w.map(_._1), w.flatMap(_._2), l).update()
     }
   }
 
-  def apply(query: String): Either[SQLParserError, SQLSelectQuery] = {
-    parse(tokens, query) match {
+  def union: Parser[UNION.type] = "(?i)union".r ^^ (_ => UNION)
+
+  def requests: Parser[List[SQLSearchRequest]] = rep1sep(request, union) ^^ { case s => s }
+
+  def apply(
+    query: String
+  ): Either[SQLParserError, Either[SQLSearchRequest, SQLMultiSearchRequest]] = {
+    parse(requests, query) match {
       case NoSuccess(msg, _) =>
-        println(msg)
+        Console.err.println(msg)
         Left(SQLParserError(msg))
-      case Success(result, _) => Right(result.update())
+      case Success(result, _) =>
+        result match {
+          case x :: Nil => Right(Left(x))
+          case _        => Right(Right(SQLMultiSearchRequest(result)))
+        }
     }
   }
 
@@ -335,8 +334,8 @@ object SQLParser extends RegexParsers {
         }
       case (_: EndDelimiter) :: rest =>
         processTokensHelper(rest, stack) // Ignore and move on
-      case (orderBy: SQLOrderBy) :: rest =>
-        processTokensHelper(rest, stack, Some(orderBy))
+      case (orderBy: SQLOrderBy) :: Nil => // We only expect order by clause after all other tokens
+        processTokensHelper(Nil, stack, Some(orderBy))
       case _ => throw new IllegalStateException("Unexpected token type")
     }
   }

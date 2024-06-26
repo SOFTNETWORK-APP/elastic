@@ -3,7 +3,7 @@ package app.softnetwork.elastic.client
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Flow
-import app.softnetwork.elastic.sql.{SQLQueries, SQLQuery}
+import app.softnetwork.elastic.sql.SQLQuery
 import app.softnetwork.persistence.message.CountResponse
 import org.json4s.Formats
 import app.softnetwork.persistence.model.Timestamped
@@ -70,7 +70,7 @@ trait MockElasticClientApi extends ElasticClientApi {
     Future.successful(search(sqlQuery))
 
   override def multiSearch[U](
-    sqlQueries: SQLQueries
+    sqlQuery: SQLQuery
   )(implicit m: Manifest[U], formats: Formats): List[List[U]] =
     throw new UnsupportedOperationException
 
@@ -191,7 +191,7 @@ trait MockElasticClientApi extends ElasticClientApi {
     formats: Formats
   ): List[List[(U, List[I])]] = List.empty
 
-  override def multiSearchWithInnerHits[U, I](sqlQueries: SQLQueries, innerField: String)(implicit
+  override def multiSearchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
     formats: Formats
