@@ -28,10 +28,13 @@ case class ElasticSearchRequest(
   criteria: Option[SQLCriteria],
   limit: Option[Int],
   search: SearchRequest,
-  aggregates: Seq[ElasticAggregation] = Seq.empty
+  aggregations: Seq[ElasticAggregation] = Seq.empty
 ) {
-  def minScore(score: Double): ElasticSearchRequest = {
-    this.copy(search = search minScore score)
+  def minScore(score: Option[Double]): ElasticSearchRequest = {
+    score match {
+      case Some(s) => this.copy(search = search minScore s)
+      case _       => this
+    }
   }
 
   def query: String =

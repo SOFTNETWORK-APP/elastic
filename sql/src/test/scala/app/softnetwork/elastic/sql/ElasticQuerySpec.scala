@@ -533,7 +533,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
            |  )
            |ORDER BY preparationTime ASC, nbOrders DESC
            |LIMIT 100""".stripMargin
-      ).search
+      ).minScore(1.0).search
     select.isDefined shouldBe true
     val result = select.get
     println(result.query)
@@ -699,6 +699,7 @@ class ElasticQuerySpec extends AnyFlatSpec with Matchers {
         |  },
         |  "from": 0,
         |  "size": 100,
+        |  "min_score": 1.0,
         |  "sort": [
         |    {
         |      "preparationTime": {
