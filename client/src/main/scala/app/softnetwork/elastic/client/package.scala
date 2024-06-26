@@ -74,7 +74,7 @@ package object client {
   trait BulkElasticResultItem { def index: String }
 
   case class BulkSettings[A](disableRefresh: Boolean = false)(implicit
-    updateSettingsApi: UpdateSettingsApi,
+    settingsApi: SettingsApi,
     toBulkElasticAction: A => BulkElasticAction
   ) extends GraphStage[FlowShape[A, A]] {
 
@@ -94,7 +94,7 @@ package object client {
             val index = elem.index
             if (!indices.contains(index)) {
               if (disableRefresh) {
-                updateSettingsApi.updateSettings(
+                settingsApi.updateSettings(
                   index,
                   """{"index" : {"refresh_interval" : "-1", "number_of_replicas" : 0} }"""
                 )

@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
   */
 trait ElasticClientApi
     extends IndicesApi
-    with UpdateSettingsApi
+    with SettingsApi
     with AliasApi
     with MappingApi
     with CountApi
@@ -99,7 +99,7 @@ trait AliasApi {
   def addAlias(index: String, alias: String): Boolean
 }
 
-trait UpdateSettingsApi { _: IndicesApi =>
+trait SettingsApi { _: IndicesApi =>
   def toggleRefresh(index: String, enable: Boolean): Unit = {
     updateSettings(
       index,
@@ -113,6 +113,8 @@ trait UpdateSettingsApi { _: IndicesApi =>
   }
 
   def updateSettings(index: String, settings: String = defaultSettings): Boolean
+
+  def loadSettings(): String
 }
 
 trait MappingApi {
@@ -227,7 +229,7 @@ trait DeleteApi { _: RefreshApi =>
 
 }
 
-trait BulkApi { _: RefreshApi with UpdateSettingsApi =>
+trait BulkApi { _: RefreshApi with SettingsApi =>
   type A
   type R
 

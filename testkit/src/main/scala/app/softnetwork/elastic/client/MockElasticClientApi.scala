@@ -219,6 +219,8 @@ trait MockElasticClientApi extends ElasticClientApi {
     ec: ExecutionContext
   ): Future[Seq[SingleValueAggregateResult]] =
     throw new UnsupportedOperationException
+
+  override def loadSettings(): String = throw new UnsupportedOperationException
 }
 
 trait ElasticDocuments {

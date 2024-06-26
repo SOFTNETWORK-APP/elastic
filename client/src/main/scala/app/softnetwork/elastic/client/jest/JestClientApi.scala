@@ -13,7 +13,7 @@ import io.searchbox.core._
 import io.searchbox.core.search.aggregation.RootAggregation
 import io.searchbox.indices.aliases.{AddAliasMapping, ModifyAliases}
 import io.searchbox.indices.mapping.{GetMapping, PutMapping}
-import io.searchbox.indices.settings.UpdateSettings
+import io.searchbox.indices.settings.{GetSettings, UpdateSettings}
 import io.searchbox.indices._
 import io.searchbox.params.Parameters
 import org.json4s.Formats
@@ -29,7 +29,7 @@ trait JestClientApi
     extends ElasticClientApi
     with JestIndicesApi
     with JestAliasApi
-    with JestUpdateSettingsApi
+    with JestSettingsApi
     with JestMappingApi
     with JestRefreshApi
     with JestFlushApi
@@ -65,11 +65,14 @@ trait JestAliasApi extends AliasApi with JestClientCompanion {
   }
 }
 
-trait JestUpdateSettingsApi extends UpdateSettingsApi with JestClientCompanion { _: IndicesApi =>
+trait JestSettingsApi extends SettingsApi with JestClientCompanion { _: IndicesApi =>
   override def updateSettings(index: String, settings: String = defaultSettings): Boolean =
     closeIndex(index) &&
     apply().execute(new UpdateSettings.Builder(settings).addIndex(index).build()).isSucceeded &&
     openIndex(index)
+
+  override def loadSettings(): String =
+    apply().execute(new GetSettings.Builder().build()).getJsonString
 }
 
 trait JestMappingApi extends MappingApi with JestClientCompanion { _: IndicesApi =>
@@ -613,7 +616,7 @@ trait JestSearchApi extends SearchApi with JestClientCompanion {
 
 trait JestBulkApi
     extends JestRefreshApi
-    with JestUpdateSettingsApi
+    with JestSettingsApi
     with JestIndicesApi
     with BulkApi
     with JestClientCompanion {
