@@ -184,8 +184,8 @@ trait SQLWhereParser { self: SQLParser with SQLOrderByParser =>
     }
 
   def betweenExpr: Parser[SQLExpressionOperator] = "(?i)between".r ^^ (_ => BETWEEN)
-  def between: Parser[SQLCriteria] = identifier ~ betweenExpr ~ literal ~ and ~ literal ^^ {
-    case i ~ _ ~ from ~ _ ~ to => SQLBetween(i, from, to)
+  def between: Parser[SQLCriteria] = identifier ~ not.? ~ betweenExpr ~ literal ~ and ~ literal ^^ {
+    case i ~ n ~ _ ~ from ~ _ ~ to => SQLBetween(i, from, to, n)
   }
 
   def distanceFunction: Parser[SQLFunction] = "(?i)distance".r ^^ (_ => SQLDistance)

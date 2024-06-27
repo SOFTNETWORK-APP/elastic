@@ -412,10 +412,15 @@ case class SQLIn[R, +T <: SQLValue[R]](
   }
 }
 
-case class SQLBetween(identifier: SQLIdentifier, from: SQLLiteral, to: SQLLiteral)
-    extends SQLCriteriaWithIdentifier
+case class SQLBetween(
+  identifier: SQLIdentifier,
+  from: SQLLiteral,
+  to: SQLLiteral,
+  maybeNot: Option[NOT.type]
+) extends SQLCriteriaWithIdentifier
     with ElasticFilter {
-  override def sql = s"$identifier ${operator.sql} ${from.sql} and ${to.sql}"
+  override def sql =
+    s"$identifier ${maybeNot.map(_ => "not ").getOrElse("")}${operator.sql} ${from.sql} and ${to.sql}"
   override def operator: SQLOperator = BETWEEN
   override def update(request: SQLSearchRequest): SQLCriteria = {
     val updated = this.copy(identifier = identifier.update(request))
@@ -431,7 +436,11 @@ case class SQLBetween(identifier: SQLIdentifier, from: SQLLiteral, to: SQLLitera
     innerHitsNames: Set[String] = Set.empty,
     currentQuery: Option[ElasticBoolQuery]
   ): Query = {
-    rangeQuery(identifier.columnName) gte from.value lte to.value
+    val r = rangeQuery(identifier.columnName) gte from.value lte to.value
+    maybeNot match {
+      case Some(_) => not(r)
+      case _       => r
+    }
   }
 }
 
