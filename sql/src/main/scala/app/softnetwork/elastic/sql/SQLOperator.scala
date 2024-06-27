@@ -6,31 +6,31 @@ sealed trait SQLExpressionOperator extends SQLOperator
 
 sealed trait SQLComparisonOperator extends SQLExpressionOperator
 
-case object EQ extends SQLExpr("=") with SQLComparisonOperator
-case object NE extends SQLExpr("<>") with SQLComparisonOperator
-case object GE extends SQLExpr(">=") with SQLComparisonOperator
-case object GT extends SQLExpr(">") with SQLComparisonOperator
-case object LE extends SQLExpr("<=") with SQLComparisonOperator
-case object LT extends SQLExpr("<") with SQLComparisonOperator
+case object Eq extends SQLExpr("=") with SQLComparisonOperator
+case object Ne extends SQLExpr("<>") with SQLComparisonOperator
+case object Ge extends SQLExpr(">=") with SQLComparisonOperator
+case object Gt extends SQLExpr(">") with SQLComparisonOperator
+case object Le extends SQLExpr("<=") with SQLComparisonOperator
+case object Lt extends SQLExpr("<") with SQLComparisonOperator
 
-sealed trait SQLLogicalOperator extends SQLExpressionOperator
+sealed trait SQLLogicalOperator extends SQLExpressionOperator with SQLRegex
 
-case object IN extends SQLExpr("in") with SQLLogicalOperator
-case object LIKE extends SQLExpr("like") with SQLLogicalOperator
-case object BETWEEN extends SQLExpr("between") with SQLLogicalOperator
-case object IS_NULL extends SQLExpr("is null") with SQLLogicalOperator
-case object IS_NOT_NULL extends SQLExpr("is not null") with SQLLogicalOperator
-case object NOT extends SQLLogicalOperator { override val sql: String = "not" }
+case object In extends SQLExpr("in") with SQLLogicalOperator
+case object Like extends SQLExpr("like") with SQLLogicalOperator
+case object Between extends SQLExpr("between") with SQLLogicalOperator
+case object IsNull extends SQLExpr("is null") with SQLLogicalOperator
+case object IsNotNull extends SQLExpr("is not null") with SQLLogicalOperator
+case object Not extends SQLExpr("not") with SQLLogicalOperator
 
 sealed trait SQLPredicateOperator extends SQLLogicalOperator
 
-case object AND extends SQLPredicateOperator { override val sql: String = "and" }
-case object OR extends SQLPredicateOperator { override val sql: String = "or" }
+case object And extends SQLExpr("and") with SQLPredicateOperator
+case object Or extends SQLExpr("or") with SQLPredicateOperator
 
-case object UNION extends SQLExpr("union") with SQLOperator
+case object Union extends SQLExpr("union") with SQLOperator with SQLRegex
 
-sealed trait ElasticOperator extends SQLOperator
-case object NESTED extends SQLExpr("nested") with ElasticOperator
-case object CHILD extends SQLExpr("child") with ElasticOperator
-case object PARENT extends SQLExpr("parent") with ElasticOperator
-case object MATCH extends SQLExpr("match") with ElasticOperator
+sealed trait ElasticOperator extends SQLOperator with SQLRegex
+case object Nested extends SQLExpr("nested") with ElasticOperator
+case object Child extends SQLExpr("child") with ElasticOperator
+case object Parent extends SQLExpr("parent") with ElasticOperator
+case object Match extends SQLExpr("match") with ElasticOperator

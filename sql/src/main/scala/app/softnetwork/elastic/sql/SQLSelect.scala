@@ -13,13 +13,13 @@ import com.sksamuel.elastic4s.ElasticApi.{
 }
 import com.sksamuel.elastic4s.searches.aggs.Aggregation
 
-case object SELECT extends SQLExpr("select")
+case object Select extends SQLExpr("select") with SQLRegex
 
 case class SQLField(
   identifier: SQLIdentifier,
   alias: Option[SQLAlias] = None
 ) extends Updateable {
-  override def sql: String = s"${identifier.sql}${asString(alias)}"
+  override def sql: String = s"$identifier${asString(alias)}"
   def update(request: SQLSearchRequest): SQLField =
     this.copy(identifier = identifier.update(request))
   lazy val sourceField: String =
@@ -32,17 +32,19 @@ case class SQLField(
     }
 }
 
+case object Except extends SQLExpr("except") with SQLRegex
+
 case class SQLExcept(fields: Seq[SQLField]) extends Updateable {
-  override def sql: String = s" except(${fields.map(_.sql).mkString(",")})"
+  override def sql: String = s" $Except(${fields.mkString(",")})"
   def update(request: SQLSearchRequest): SQLExcept =
     this.copy(fields = fields.map(_.update(request)))
 }
 
-case object FILTER extends SQLExpr("filter")
+case object Filter extends SQLExpr("filter") with SQLRegex
 
 case class SQLFilter(criteria: Option[SQLCriteria]) extends Updateable {
   override def sql: String = criteria match {
-    case Some(c) => s" $FILTER($c)"
+    case Some(c) => s" $Filter($c)"
     case _       => ""
   }
   def update(request: SQLSearchRequest): SQLFilter =
@@ -55,7 +57,7 @@ class SQLAggregate(
   override val alias: Option[SQLAlias] = None,
   val filter: Option[SQLFilter] = None
 ) extends SQLField(identifier, alias) {
-  override def sql: String = s"${function.sql}(${identifier.sql})${asString(alias)}"
+  override def sql: String = s"$function($identifier)${asString(alias)}"
   override def update(request: SQLSearchRequest): SQLAggregate =
     new SQLAggregate(function, identifier.update(request), alias, filter.map(_.update(request)))
 
@@ -71,9 +73,9 @@ class SQLAggregate(
 
     val agg =
       if (distinct)
-        s"${function.sql}_distinct_${sourceField.replace(".", "_")}"
+        s"${function}_distinct_${sourceField.replace(".", "_")}"
       else
-        s"${function.sql}_${sourceField.replace(".", "_")}"
+        s"${function}_${sourceField.replace(".", "_")}"
 
     var aggPath = Seq[String]()
 
@@ -143,7 +145,7 @@ case class SQLSelect(
   except: Option[SQLExcept] = None
 ) extends Updateable {
   override def sql: String =
-    s"$SELECT ${fields.map(_.sql).mkString(",")}${except.map(_.sql).getOrElse("")}"
+    s"$Select ${fields.mkString(",")}${except.getOrElse("")}"
   def update(request: SQLSearchRequest): SQLSelect =
     this.copy(fields = fields.map(_.update(request)), except = except.map(_.update(request)))
 }

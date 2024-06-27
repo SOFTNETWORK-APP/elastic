@@ -1,17 +1,17 @@
 package app.softnetwork.elastic.sql
 
-case object ORDER_BY extends SQLExpr("order by")
+case object OrderBy extends SQLExpr("order by") with SQLRegex
 
-sealed trait SortOrder extends SQLToken
+sealed trait SortOrder extends SQLRegex
 
-case object DESC extends SQLExpr("desc") with SortOrder
+case object Desc extends SQLExpr("desc") with SortOrder
 
-case object ASC extends SQLExpr("asc") with SortOrder
+case object Asc extends SQLExpr("asc") with SortOrder
 
 case class SQLFieldSort(field: String, order: Option[SortOrder]) extends SQLToken {
-  override def sql: String = s"$field ${order.getOrElse(ASC).sql}"
+  override def sql: String = s"$field ${order.getOrElse(Asc)}"
 }
 
 case class SQLOrderBy(sorts: Seq[SQLFieldSort]) extends SQLToken {
-  override def sql: String = s" $ORDER_BY ${sorts.map(_.sql).mkString(",")}"
+  override def sql: String = s" $OrderBy ${sorts.mkString(",")}"
 }

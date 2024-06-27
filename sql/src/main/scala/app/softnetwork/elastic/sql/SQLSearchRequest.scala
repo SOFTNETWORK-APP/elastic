@@ -12,7 +12,7 @@ case class SQLSearchRequest(
   limit: Option[SQLLimit] = None
 ) extends SQLToken {
   override def sql: String =
-    s"${select.sql}${from.sql}${asString(where)}${asString(orderBy)}${asString(limit)}"
+    s"$select$from${asString(where)}${asString(orderBy)}${asString(limit)}"
   lazy val aliases: Seq[String] = from.aliases
   lazy val unnests: Seq[(String, String, Option[SQLLimit])] = from.unnests
   def update(): SQLSearchRequest = {
@@ -57,7 +57,7 @@ case class SQLSearchRequest(
       case Some(o) =>
         _search sortBy o.sorts.map(sort =>
           sort.order match {
-            case Some(DESC) => FieldSort(sort.field).desc()
+            case Some(Desc) => FieldSort(sort.field).desc()
             case _          => FieldSort(sort.field).asc()
           }
         )

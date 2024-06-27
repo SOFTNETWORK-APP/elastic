@@ -1,10 +1,12 @@
 package app.softnetwork.elastic.sql
 
-case object FROM extends SQLExpr("from")
+case object From extends SQLExpr("from") with SQLRegex
 
 sealed trait SQLSource extends Updateable {
   def update(request: SQLSearchRequest): SQLSource
 }
+
+case object Distinct extends SQLExpr("distinct") with SQLRegex
 
 case class SQLIdentifier(
   columnName: String,
@@ -49,8 +51,10 @@ case class SQLIdentifier(
   }
 }
 
+case object Unnest extends SQLExpr("unnest") with SQLRegex
+
 case class SQLUnnest(identifier: SQLIdentifier, limit: Option[SQLLimit]) extends SQLSource {
-  override def sql: String = s"unnest(${identifier /*.copy(distinct = None)*/ .sql})"
+  override def sql: String = s"$Unnest($identifier${asString(limit)})"
   def update(request: SQLSearchRequest): SQLUnnest =
     this.copy(identifier = identifier.update(request))
 }
@@ -61,7 +65,7 @@ case class SQLTable(source: SQLSource, alias: Option[SQLAlias] = None) extends U
 }
 
 case class SQLFrom(tables: Seq[SQLTable]) extends Updateable {
-  override def sql: String = s" $FROM ${tables.map(_.sql).mkString(",")}"
+  override def sql: String = s" $From ${tables.map(_.sql).mkString(",")}"
   lazy val aliases: Seq[String] = tables.flatMap((table: SQLTable) => table.alias).map(_.alias)
   lazy val unnests: Seq[(String, String, Option[SQLLimit])] = tables.collect {
     case SQLTable(u: SQLUnnest, a) =>

@@ -3,6 +3,7 @@ package app.softnetwork.elastic
 import java.util.regex.Pattern
 import scala.reflect.runtime.universe._
 import scala.util.Try
+import scala.util.matching.Regex
 
 /** Created by smanciot on 27/06/2018.
   */
@@ -36,12 +37,12 @@ package object sql {
         None
       else
         operator match {
-          case Some(_: EQ.type) => values.find(_ == value)
-          case Some(_: NE.type) => values.find(_ != value)
-          case Some(_: GE.type) => values.filter(_ >= value).sorted.reverse.headOption
-          case Some(_: GT.type) => values.filter(_ > value).sorted.reverse.headOption
-          case Some(_: LE.type) => values.filter(_ <= value).sorted.headOption
-          case Some(_: LT.type) => values.filter(_ < value).sorted.headOption
+          case Some(_: Eq.type) => values.find(_ == value)
+          case Some(_: Ne.type) => values.find(_ != value)
+          case Some(_: Ge.type) => values.filter(_ >= value).sorted.reverse.headOption
+          case Some(_: Gt.type) => values.filter(_ > value).sorted.reverse.headOption
+          case Some(_: Le.type) => values.filter(_ <= value).sorted.headOption
+          case Some(_: Lt.type) => values.filter(_ < value).sorted.headOption
           case _                => values.headOption
         }
     }
@@ -70,9 +71,9 @@ package object sql {
       separator: String = "|"
     )(implicit ev: R => Ordered[R]): Option[R] = {
       operator match {
-        case Some(_: EQ.type)   => values.find(v => v.toString contentEquals value)
-        case Some(_: NE.type)   => values.find(v => !(v.toString contentEquals value))
-        case Some(_: LIKE.type) => values.find(v => pattern.matcher(v.toString).matches())
+        case Some(_: Eq.type)   => values.find(v => v.toString contentEquals value)
+        case Some(_: Ne.type)   => values.find(v => !(v.toString contentEquals value))
+        case Some(_: Like.type) => values.find(v => pattern.matcher(v.toString).matches())
         case None               => Some(values.mkString(separator))
         case _                  => super.choose(values, operator, separator)
       }
@@ -176,6 +177,11 @@ package object sql {
     s"""${if (startWith) ".*?"}$v${if (endWith) ".*?"}"""
   }
 
-  case class SQLAlias(alias: String) extends SQLExpr(s" as $alias")
+  case object Alias extends SQLExpr("as") with SQLRegex
 
+  case class SQLAlias(alias: String) extends SQLExpr(s" ${Alias.sql} $alias")
+
+  trait SQLRegex extends SQLToken {
+    lazy val regex: Regex = s"\\b(?i)$sql\\b".r
+  }
 }
