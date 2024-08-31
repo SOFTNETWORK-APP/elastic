@@ -41,7 +41,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   lazy val clusterName: String = s"test-${UUID.randomUUID()}"
 
-  lazy val client: ElasticClient = ElasticClient(ElasticProperties(elasticURL))
+  lazy val elasticClient: ElasticClient = ElasticClient(ElasticProperties(elasticURL))
 
   def start(): Unit = ()
 
@@ -49,7 +49,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   override def beforeAll(): Unit = {
     start()
-    client.execute {
+    elasticClient.execute {
       createIndexTemplate("all_templates", "*").settings(
         Map("number_of_shards" -> 1, "number_of_replicas" -> 0)
       )
@@ -60,14 +60,14 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
   }
 
   override def afterAll(): Unit = {
-    client.close()
+    elasticClient.close()
     stop()
   }
 
   // Rewriting methods from IndexMatchers in elastic4s with the ElasticClient
   def haveCount(expectedCount: Int): Matcher[String] =
     (left: String) => {
-      client.execute(search(left).size(0)) complete () match {
+      elasticClient.execute(search(left).size(0)) complete () match {
         case Success(s) =>
           val count = s.result.totalHits
           MatchResult(
@@ -81,7 +81,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def containDoc(expectedId: String): Matcher[String] =
     (left: String) => {
-      client.execute(get(expectedId).from(left)) complete () match {
+      elasticClient.execute(get(expectedId).from(left)) complete () match {
         case Success(s) =>
           val exists = s.result.exists
           MatchResult(
@@ -95,7 +95,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def beCreated(): Matcher[String] =
     (left: String) => {
-      client.execute(indexExists(left)) complete () match {
+      elasticClient.execute(indexExists(left)) complete () match {
         case Success(s) =>
           val exists = s.result.isExists
           MatchResult(
@@ -109,7 +109,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def beEmpty(): Matcher[String] =
     (left: String) => {
-      client.execute(search(left).size(0)) complete () match {
+      elasticClient.execute(search(left).size(0)) complete () match {
         case Success(s) =>
           val count = s.result.totalHits
           MatchResult(
@@ -128,7 +128,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   // refreshes all specified indexes
   def refresh(indexes: Indexes): RefreshIndexResponse = {
-    client
+    elasticClient
       .execute {
         refreshIndex(indexes)
       } complete () match {
@@ -139,7 +139,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def blockUntilGreen(): Unit = {
     blockUntil("Expected cluster to have green status") { () =>
-      client
+      elasticClient
         .execute {
           clusterHealth()
         } complete () match {
@@ -154,7 +154,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
   }
 
   def ensureIndexExists(index: String): Unit = {
-    client.execute {
+    elasticClient.execute {
       createIndex(index)
     } complete () match {
       case Success(_) => ()
@@ -168,7 +168,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
   }
 
   def doesIndexExists(name: String): Boolean = {
-    client
+    elasticClient
       .execute {
         indexExists(name)
       } complete () match {
@@ -178,7 +178,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
   }
 
   def doesAliasExists(name: String): Boolean = {
-    client
+    elasticClient
       .execute {
         aliasExists(name)
       } complete () match {
@@ -189,7 +189,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def deleteIndex(name: String): Unit = {
     if (doesIndexExists(name)) {
-      client.execute {
+      elasticClient.execute {
         ElasticDsl.deleteIndex(name)
       } complete () match {
         case Success(_) => ()
@@ -206,7 +206,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def blockUntilDocumentExists(id: String, index: String, _type: String): Unit = {
     blockUntil(s"Expected to find document $id") { () =>
-      client
+      elasticClient
         .execute {
           get(id).from(index / _type)
         } complete () match {
@@ -218,7 +218,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def blockUntilCount(expected: Long, index: String): Unit = {
     blockUntil(s"Expected count of $expected") { () =>
-      client.execute {
+      elasticClient.execute {
         search(index).matchAllQuery().size(0)
       } complete () match {
         case Success(s) => expected <= s.result.totalHits
@@ -229,7 +229,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def blockUntilCount(expected: Long, indexAndTypes: IndexAndTypes): Unit = {
     blockUntil(s"Expected count of $expected") { () =>
-      client.execute {
+      elasticClient.execute {
         searchWithType(indexAndTypes).matchAllQuery().size(0)
       } complete () match {
         case Success(s) => expected <= s.result.totalHits
@@ -243,7 +243,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
     */
   def blockUntilCount(expected: Long, index: String, types: String*): Unit = {
     blockUntil(s"Expected count of $expected") { () =>
-      client.execute {
+      elasticClient.execute {
         searchWithType(index / types).matchAllQuery().size(0)
       } complete () match {
         case Success(s) => expected <= s.result.totalHits
@@ -254,7 +254,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def blockUntilExactCount(expected: Long, index: String, types: String*): Unit = {
     blockUntil(s"Expected count of $expected") { () =>
-      client
+      elasticClient
         .execute {
           searchWithType(index / types).size(0)
         } complete () match {
@@ -266,7 +266,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def blockUntilEmpty(index: String): Unit = {
     blockUntil(s"Expected empty index $index") { () =>
-      client
+      elasticClient
         .execute {
           search(Indexes(index)).size(0)
         } complete () match {
@@ -301,7 +301,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
     version: Long
   ): Unit = {
     blockUntil(s"Expected document $id to have version $version") { () =>
-      client
+      elasticClient
         .execute {
           get(id).from(index / _type)
         } complete () match {

@@ -6,11 +6,11 @@ import org.scalatest.matchers.should.Matchers
 
 /** Created by smanciot on 13/04/17.
   */
-class ElasticQuerySpec extends AnyFlatSpec with Matchers {
+class SQLQuerySpec extends AnyFlatSpec with Matchers {
 
   import scala.language.implicitConversions
 
-  "ElasticQuery" should "perform native count" in {
+  "SQLQuery" should "perform native count" in {
     val results =
       SQLQuery("select count(t.id) c2 from Table t where t.nom = \"Nom\"").aggregations
     results.size shouldBe 1

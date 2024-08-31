@@ -65,7 +65,7 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
     */
   override def createDocument(document: T)(implicit t: ClassTag[T]): Boolean = {
     Try(index(document, Some(index), Some(_type))) match {
-      case Success(_) => true
+      case Success(_) => refresh(index)
       case Failure(f) =>
         logger.error(f.getMessage, f)
         false
@@ -86,7 +86,7 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
     */
   override def updateDocument(document: T, upsert: Boolean)(implicit t: ClassTag[T]): Boolean = {
     Try(update(document, Some(index), Some(_type), upsert)) match {
-      case Success(_) => true
+      case Success(_) => refresh(index)
       case Failure(f) =>
         logger.error(f.getMessage, f)
         false
@@ -104,7 +104,7 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
     Try(
       delete(uuid, index, _type)
     ) match {
-      case Success(value) => value
+      case Success(value) => value && refresh(index)
       case Failure(f) =>
         logger.error(f.getMessage, f)
         false
@@ -121,7 +121,9 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
     *   whether the operation is successful or not
     */
   override def upsertDocument(uuid: String, data: String): Boolean = {
-    logger.debug(s"Upserting document $uuid with $data")
+    if (logger.isDebugEnabled) {
+      logger.debug(s"Upserting document $uuid for index $index with $data")
+    }
     Try(
       update(
         index,
@@ -131,7 +133,7 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
         upsert = true
       )
     ) match {
-      case Success(_) => true
+      case Success(_) => refresh(index)
       case Failure(f) =>
         logger.error(f.getMessage, f)
         false

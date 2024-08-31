@@ -124,7 +124,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
     "person1" should haveCount(3)
 
-    val response = client.execute {
+    val response = elasticClient.execute {
       search("person1").query(MatchAllQuery())
     } complete ()
 
@@ -158,7 +158,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
     "person2" should haveCount(3)
 
-    val response = client.execute {
+    val response = elasticClient.execute {
       search("person2").query(MatchAllQuery())
     } complete ()
 
@@ -201,7 +201,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
     "person-1967-11-21" should haveCount(2)
     "person-1969-05-09" should haveCount(1)
 
-    val response = client.execute {
+    val response = elasticClient.execute {
       search("person-1967-11-21", "person-1969-05-09").query(MatchAllQuery())
     } complete ()
 
@@ -238,7 +238,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
     "person4" should haveCount(3)
 
-    val response = client.execute {
+    val response = elasticClient.execute {
       search("person4").query(MatchAllQuery())
     } complete ()
 
@@ -273,7 +273,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
     "person5-1967-11-21" should haveCount(2)
     "person5-1969-05-09" should haveCount(1)
 
-    val response = client.execute {
+    val response = elasticClient.execute {
       search("person5-1967-11-21", "person5-1969-05-09").query(MatchAllQuery())
     } complete ()
 
