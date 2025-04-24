@@ -8,7 +8,7 @@ ThisBuild / organization := "app.softnetwork"
 
 name := "elastic"
 
-ThisBuild / version := "6.7.2.1"
+ThisBuild / version := "6.7.2.2"
 
 ThisBuild / scalaVersion := "2.12.18"
 
