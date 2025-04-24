@@ -41,4 +41,4 @@ val jest = Seq(
 ).map(_.excludeAll(httpComponentsExclusions ++ Seq(guavaExclusion): _*))
 
 libraryDependencies ++= configDependencies ++ json4s ++ jest :+
-  "app.softnetwork.persistence" %% "persistence-core" % "0.6.2.1"
+  "app.softnetwork.persistence" %% "persistence-core" % Versions.genericPersistence
