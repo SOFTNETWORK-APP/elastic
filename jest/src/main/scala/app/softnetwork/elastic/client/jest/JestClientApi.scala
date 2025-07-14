@@ -11,10 +11,10 @@ import app.softnetwork.serialization._
 import io.searchbox.action.BulkableAction
 import io.searchbox.core._
 import io.searchbox.core.search.aggregation.RootAggregation
-import io.searchbox.indices.aliases.{AddAliasMapping, ModifyAliases}
+import io.searchbox.indices._
+import io.searchbox.indices.aliases.{AddAliasMapping, ModifyAliases, RemoveAliasMapping}
 import io.searchbox.indices.mapping.{GetMapping, PutMapping}
 import io.searchbox.indices.settings.{GetSettings, UpdateSettings}
-import io.searchbox.indices._
 import io.searchbox.params.Parameters
 import org.json4s.Formats
 
@@ -45,10 +45,13 @@ trait JestClientApi
 trait JestIndicesApi extends IndicesApi with JestClientCompanion {
   override def createIndex(index: String, settings: String = defaultSettings): Boolean =
     apply().execute(new CreateIndex.Builder(index).settings(settings).build()).isSucceeded
+
   override def deleteIndex(index: String): Boolean =
     apply().execute(new DeleteIndex.Builder(index).build()).isSucceeded
+
   override def closeIndex(index: String): Boolean =
     apply().execute(new CloseIndex.Builder(index).build()).isSucceeded
+
   override def openIndex(index: String): Boolean =
     apply().execute(new OpenIndex.Builder(index).build()).isSucceeded
 }
@@ -63,9 +66,20 @@ trait JestAliasApi extends AliasApi with JestClientCompanion {
       )
       .isSucceeded
   }
+
+  override def removeAlias(index: String, alias: String): Boolean = {
+    apply()
+      .execute(
+        new ModifyAliases.Builder(
+          new RemoveAliasMapping.Builder(index, alias).build()
+        ).build()
+      )
+      .isSucceeded
+  }
 }
 
-trait JestSettingsApi extends SettingsApi with JestClientCompanion { _: IndicesApi =>
+trait JestSettingsApi extends SettingsApi with JestClientCompanion {
+  _: IndicesApi =>
   override def updateSettings(index: String, settings: String = defaultSettings): Boolean =
     closeIndex(index) &&
     apply().execute(new UpdateSettings.Builder(settings).addIndex(index).build()).isSucceeded &&
@@ -75,7 +89,8 @@ trait JestSettingsApi extends SettingsApi with JestClientCompanion { _: IndicesA
     apply().execute(new GetSettings.Builder().build()).getJsonString
 }
 
-trait JestMappingApi extends MappingApi with JestClientCompanion { _: IndicesApi =>
+trait JestMappingApi extends MappingApi with JestClientCompanion {
+  _: IndicesApi =>
   override def setMapping(index: String, _type: String, mapping: String): Boolean =
     apply().execute(new PutMapping.Builder(index, _type, mapping).build()).isSucceeded
 
@@ -229,7 +244,8 @@ trait JestSingleValueAggregateApi extends SingleValueAggregateApi with JestCount
   }
 }
 
-trait JestIndexApi extends IndexApi with JestClientCompanion { _: RefreshApi =>
+trait JestIndexApi extends IndexApi with JestClientCompanion {
+  _: RefreshApi =>
   override def index(index: String, _type: String, id: String, source: String): Boolean = {
     Try(
       apply().execute(
@@ -264,7 +280,8 @@ trait JestIndexApi extends IndexApi with JestClientCompanion { _: RefreshApi =>
 
 }
 
-trait JestUpdateApi extends UpdateApi with JestClientCompanion { _: RefreshApi =>
+trait JestUpdateApi extends UpdateApi with JestClientCompanion {
+  _: RefreshApi =>
   override def update(
     index: String,
     _type: String,
@@ -322,7 +339,8 @@ trait JestUpdateApi extends UpdateApi with JestClientCompanion { _: RefreshApi =
 
 }
 
-trait JestDeleteApi extends DeleteApi with JestClientCompanion { _: RefreshApi =>
+trait JestDeleteApi extends DeleteApi with JestClientCompanion {
+  _: RefreshApi =>
   override def delete(uuid: String, index: String, _type: String): Boolean = {
     val result = apply().execute(
       new Delete.Builder(uuid).index(index).`type`(_type).build()
@@ -669,7 +687,7 @@ trait JestBulkApi
   override def toBulkAction(bulkItem: BulkItem): A = {
     val builder = bulkItem.action match {
       case BulkAction.DELETE => new Delete.Builder(bulkItem.body)
-      case BulkAction.UPDATE => new Update.Builder(bulkItem.body)
+      case BulkAction.UPDATE => new Update.Builder(docAsUpsert(bulkItem.body))
       case _                 => new Index.Builder(bulkItem.body)
     }
     bulkItem.id.foreach(builder.id)
@@ -702,8 +720,9 @@ object JestClientApi {
   implicit class MultiSearchSQLQuery(sqlQuery: SQLQuery) {
     def jestMultiSearch: Option[MultiSearch] = {
       sqlQuery.multiSearch.map(m => {
-        import scala.collection.JavaConverters._
         import m._
+
+        import scala.collection.JavaConverters._
         Console.println(query)
         new MultiSearch.Builder(m.requests.map(requestToSearch).asJava).build()
       })

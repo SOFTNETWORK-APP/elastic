@@ -4,7 +4,8 @@ import java.io.ByteArrayInputStream
 import java.util.concurrent.TimeUnit
 import java.util.UUID
 import akka.actor.ActorSystem
-import app.softnetwork.elastic.client.JestProviders._
+//import app.softnetwork.elastic.client.RestHighLevelClientProviders._
+import app.softnetwork.elastic.client.jest.JestClientCompanion
 import app.softnetwork.elastic.sql.SQLQuery
 import com.fasterxml.jackson.core.JsonParseException
 import com.sksamuel.elastic4s.searches.queries.matches.MatchAllQuery
@@ -18,6 +19,7 @@ import org.scalatest.matchers.should.Matchers
 import app.softnetwork.persistence._
 import app.softnetwork.serialization._
 import app.softnetwork.elastic.model._
+import app.softnetwork.elastic.persistence.query.ElasticProvider
 import app.softnetwork.elastic.scalatest.EmbeddedElasticTestKit
 import app.softnetwork.persistence.person.model.Person
 import org.json4s.Formats
@@ -30,7 +32,7 @@ import scala.util.{Failure, Success}
 
 /** Created by smanciot on 28/06/2018.
   */
-class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with Matchers {
+trait ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with Matchers {
 
   lazy val log: Logger = LoggerFactory getLogger getClass.getName
 
@@ -40,9 +42,16 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
   implicit val formats: Formats = commonFormats
 
-  lazy val pClient = new PersonProvider(elasticConfig)
-  lazy val sClient = new SampleProvider(elasticConfig)
-  lazy val bClient = new BinaryProvider(elasticConfig)
+  def pClient: ElasticProvider[Person] with ElasticClientApi
+  def sClient: ElasticProvider[Sample] with ElasticClientApi
+  def bClient: ElasticProvider[Binary] with ElasticClientApi
+
+  lazy val jestClient: JestClient = {
+    val config = elasticConfig
+    new JestClientCompanion {
+      override def elasticConfig: ElasticConfig = ElasticConfig(config)
+    }.apply()
+  }
 
   import scala.language.implicitConversions
 
@@ -72,11 +81,11 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
     pClient.addAlias("person", "person_alias")
 
     val aliasExists = new AliasExists.Builder().build()
-    pClient.jestClient.execute(aliasExists).isSucceeded shouldBe true
+    jestClient.execute(aliasExists).isSucceeded shouldBe true
   }
 
   private def settings =
-    pClient.jestClient
+    jestClient
       .execute(new GetSettings.Builder().addIndex("person").build())
       .getJsonObject
       .getAsJsonObject("person")
@@ -115,7 +124,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
   "Bulk index valid json without id key and suffix key" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person1", "person", 2)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices = pClient.bulk[String](persons.iterator, identity, None, None, None)
 
     indices should contain only "person1"
@@ -139,16 +148,16 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
   }
 
   "Bulk index valid json with an id key but no suffix key" should "work" in {
-    pClient.jestClient.execute(new CreateIndex.Builder("person2").build())
+    jestClient.execute(new CreateIndex.Builder("person2").build())
     val childMapping = new PutMapping.Builder(
       "person2",
       "child",
       "{ \"child\" : { \"_parent\" : {\"type\": \"person\"}, \"properties\" : { \"name\" : {\"type\" : \"string\", \"index\" : \"not_analyzed\"} } } }"
     ).build()
-    pClient.jestClient.execute(childMapping)
+    jestClient.execute(childMapping)
 
     implicit val bulkOptions: BulkOptions = BulkOptions("person2", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices = pClient.bulk[String](persons.iterator, identity, Some("uuid"), None, None)
     refresh(indices)
 
@@ -188,7 +197,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
   "Bulk index valid json with an id key and a suffix key" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices =
       pClient.bulk[String](persons.iterator, identity, Some("uuid"), Some("birthDate"), None, None)
     refresh(indices)
@@ -217,7 +226,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
   "Bulk index invalid json with an id key and a suffix key" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person_error", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     intercept[JsonParseException] {
       val invalidJson = persons :+ "fail"
       pClient.bulk[String](invalidJson.iterator, identity, None, None, None)
@@ -226,7 +235,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
   "Bulk upsert valid json with an id key but no suffix key" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person4", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices =
       pClient
         .bulk[String](personsWithUpsert.iterator, identity, Some("uuid"), None, None, Some(true))
@@ -242,19 +251,21 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
       search("person4").query(MatchAllQuery())
     } complete ()
 
+    logger.info(s"response: ${response.result.hits.hits.mkString("\n")}")
+
     response.result.hits.hits.foreach { h =>
-      h.id shouldBe h.sourceField("uuid")
+      h.id shouldBe h.sourceAsMap.getOrElse("uuid", "")
     }
 
     response.result.hits.hits
       .map(
-        _.sourceField("name")
+        _.sourceAsMap.getOrElse("name", "")
       ) should contain allOf ("Homer Simpson", "Moe Szyslak", "Barney Gumble2")
   }
 
   "Bulk upsert valid json with an id key and a suffix key" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person5", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices = pClient.bulk[String](
       personsWithUpsert.iterator,
       identity,
@@ -278,18 +289,18 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
     } complete ()
 
     response.result.hits.hits.foreach { h =>
-      h.id shouldBe h.sourceField("uuid")
+      h.id shouldBe h.sourceAsMap.getOrElse("uuid", "")
     }
 
     response.result.hits.hits
       .map(
-        _.sourceField("name")
+        _.sourceAsMap.getOrElse("name", "")
       ) should contain allOf ("Homer Simpson", "Moe Szyslak", "Barney Gumble2")
   }
 
   "Count" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person6", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices =
       pClient
         .bulk[String](personsWithUpsert.iterator, identity, Some("uuid"), None, None, Some(true))
@@ -311,7 +322,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
   "Search" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person7", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices =
       pClient
         .bulk[String](personsWithUpsert.iterator, identity, Some("uuid"), None, None, Some(true))
@@ -323,19 +334,24 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
     "person7" should haveCount(3)
 
-    pClient.searchAsync[Person](SQLQuery("select * from person7")) assert {
-      _.size should ===(3)
+    pClient.searchAsync[Person]("select * from person7") onComplete {
+      case Success(r) =>
+        r.size should ===(3)
+        r.map(_.uuid) should contain allOf ("A12", "A14", "A16")
+      case Failure(f) => fail(f.getMessage)
     }
 
-    pClient.searchAsync[Person](SQLQuery("select * from person7 where _id=\"A16\"")) assert {
-      _.size should ===(1)
+    pClient.searchAsync[Person](SQLQuery("select * from person7 where _id=\"A16\"")) onComplete {
+      case Success(r) =>
+        r.size should ===(1)
+        r.map(_.uuid) should contain("A16")
+      case Failure(f) => fail(f.getMessage)
     }
-
   }
 
   "Get all" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person8", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices =
       pClient
         .bulk[String](personsWithUpsert.iterator, identity, Some("uuid"), None, None, Some(true))
@@ -355,7 +371,7 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
 
   "Get" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person9", "person", 1000)
-    implicit val jclient: JestClient = pClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val indices =
       pClient
         .bulk[String](personsWithUpsert.iterator, identity, Some("uuid"), None, None, Some(true))
@@ -375,31 +391,39 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
   }
 
   "Index" should "work" in {
-    implicit val jclient: JestClient = sClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val uuid = UUID.randomUUID().toString
     val sample = Sample(uuid)
     val result = sClient.index(sample)
     result shouldBe true
 
     val result2 = sClient.get[Sample](uuid)
-    result2.isDefined shouldBe true
-    result2.get.uuid shouldBe uuid
+    result2 match {
+      case Some(r) =>
+        r.uuid shouldBe uuid
+      case _ =>
+        fail("Sample not found")
+    }
   }
 
   "Update" should "work" in {
-    implicit val jclient: JestClient = sClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val uuid = UUID.randomUUID().toString
     val sample = Sample(uuid)
     val result = sClient.update(sample)
     result shouldBe true
 
     val result2 = sClient.get[Sample](uuid)
-    result2.isDefined shouldBe true
-    result2.get.uuid shouldBe uuid
+    result2 match {
+      case Some(r) =>
+        r.uuid shouldBe uuid
+      case _ =>
+        fail("Sample not found")
+    }
   }
 
   "Delete" should "work" in {
-    implicit val jclient: JestClient = sClient.jestClient
+    implicit val jclient: JestClient = jestClient
     val uuid = UUID.randomUUID().toString
     val sample = Sample(uuid)
     val result = sClient.index(sample)
@@ -408,16 +432,15 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
     val result2 = sClient.delete(sample.uuid, Some("sample"), Some("sample"))
     result2 shouldBe true
 
-    val result3 = sClient.get(uuid)
+    val result3 = sClient.get[Sample](uuid)
     result3.isEmpty shouldBe true
   }
 
   "Index binary data" should "work" in {
-    implicit val jclient: JestClient = bClient.jestClient
+    implicit val jclient: JestClient = jestClient
     bClient.createIndex("binaries") shouldBe true
     val mapping =
       """{
-        |  "test": {
         |    "properties": {
         |      "uuid": {
         |        "type": "keyword",
@@ -436,7 +459,6 @@ class ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
         |        "type": "keyword"
         |      }
         |    }
-        |  }
         |}
       """.stripMargin
     bClient.setMapping("binaries", "test", mapping) shouldBe true

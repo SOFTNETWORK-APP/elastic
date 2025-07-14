@@ -32,4 +32,7 @@ object Versions {
 
   val genericPersistence = "0.7.1"
 
+  val gson = "2.8.0"
+
+  val rest = "6.7.2" // rest high level client
 }

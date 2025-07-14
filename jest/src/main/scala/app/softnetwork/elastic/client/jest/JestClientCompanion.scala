@@ -1,19 +1,18 @@
 package app.softnetwork.elastic.client.jest
 
-import java.io.IOException
-import java.util
-import java.util.concurrent.TimeUnit
 import app.softnetwork.elastic.client.{ElasticConfig, ElasticCredentials}
 import com.sksamuel.exts.Logging
 import io.searchbox.action.Action
-import io.searchbox.client.{JestClient, JestClientFactory, JestResult, JestResultHandler}
 import io.searchbox.client.config.HttpClientConfig
+import io.searchbox.client.{JestClient, JestClientFactory, JestResult, JestResultHandler}
 import org.apache.http.HttpHost
 
+import java.io.IOException
+import java.util
+import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
-import scala.util.{Failure, Success, Try}
-
 import scala.language.reflectiveCalls
+import scala.util.{Failure, Success, Try}
 
 /** Created by smanciot on 20/05/2021.
   */

@@ -97,6 +97,7 @@ trait IndicesApi {
 
 trait AliasApi {
   def addAlias(index: String, alias: String): Boolean
+  def removeAlias(index: String, alias: String): Boolean
 }
 
 trait SettingsApi { _: IndicesApi =>
@@ -442,12 +443,7 @@ trait BulkApi { _: RefreshApi with SettingsApi =>
         }
     }
 
-    val body = action match {
-      case BulkAction.UPDATE => docAsUpsert(document)
-      case _                 => document
-    }
-
-    BulkItem(index, action, body, id, parent)
+    BulkItem(index, action, document, id, parent)
   }
 
 }
