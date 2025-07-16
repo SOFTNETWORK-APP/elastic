@@ -25,6 +25,8 @@ val scalatest = Seq(
 
 libraryDependencies ++= jackson ++ elastic4s ++ scalatest ++ Seq(
   "javax.activation" % "activation" % "1.1.1" % Test
-) :+ "org.scala-lang" % "scala-reflect" % "2.12.18"
+) :+
+  "org.scala-lang" % "scala-reflect" % "2.12.18" :+
+  "com.google.code.gson" % "gson" % Versions.gson % Test
 
 
