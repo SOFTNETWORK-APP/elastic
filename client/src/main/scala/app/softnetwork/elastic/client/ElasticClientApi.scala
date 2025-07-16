@@ -120,12 +120,12 @@ trait SettingsApi { _: IndicesApi =>
 
 trait MappingApi {
   @deprecated("Use setMapping(index: String, mapping: String) instead", "0.7.29")
-  def setMapping(index: String, `type`: String, mapping: String): Boolean = {
+  def setMapping(index: String, indexType: String, mapping: String): Boolean = {
     this.setMapping(index, mapping)
   }
   def setMapping(index: String, mapping: String): Boolean
   @deprecated("Use getMapping(index: String) instead", "0.7.29")
-  def getMapping(index: String, `type`: String): String = {
+  def getMapping(index: String, indexType: String): String = {
     this.getMapping(index)
   }
   def getMapping(index: String): String
@@ -145,16 +145,16 @@ trait IndexApi { _: RefreshApi =>
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U], formats: Formats): Boolean = {
-    val `type` = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     this.index(
-      index.getOrElse(`type`),
+      index.getOrElse(indexType),
       entity.uuid,
       serialization.write[U](entity)
     )
   }
 
   @deprecated("Use index(index: String, id: String, source: String) instead", "0.7.29")
-  def index(index: String, `type`: String, id: String, source: String): Boolean = {
+  def index(index: String, indexType: String, id: String, source: String): Boolean = {
     this.index(index, id, source)
   }
 
@@ -165,12 +165,12 @@ trait IndexApi { _: RefreshApi =>
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
-    val `type` = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    indexAsync(index.getOrElse(`type`), entity.uuid, serialization.write[U](entity))
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    indexAsync(index.getOrElse(indexType), entity.uuid, serialization.write[U](entity))
   }
 
   @deprecated("Use indexAsync(index: String, id: String, source: String) instead", "0.7.29")
-  def indexAsync(index: String, `type`: String, id: String, source: String)(implicit
+  def indexAsync(index: String, indexType: String, id: String, source: String)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
     this.indexAsync(index, id, source)
@@ -188,9 +188,9 @@ trait UpdateApi { _: RefreshApi =>
     maybeType: Option[String] = None,
     upsert: Boolean = true
   )(implicit u: ClassTag[U], formats: Formats): Boolean = {
-    val `type` = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     this.update(
-      index.getOrElse(`type`),
+      index.getOrElse(indexType),
       entity.uuid,
       serialization.write[U](entity),
       upsert
@@ -203,7 +203,7 @@ trait UpdateApi { _: RefreshApi =>
   )
   def update(
     index: String,
-    `type`: String,
+    indexType: String,
     id: String,
     source: String,
     upsert: Boolean
@@ -219,10 +219,10 @@ trait UpdateApi { _: RefreshApi =>
     maybeType: Option[String] = None,
     upsert: Boolean = true
   )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
-    val `type` = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     this
       .updateAsync(
-        index.getOrElse(`type`),
+        index.getOrElse(indexType),
         entity.uuid,
         serialization.write[U](entity),
         upsert
@@ -233,7 +233,7 @@ trait UpdateApi { _: RefreshApi =>
     "Use updateAsync(index: String, id: String, source: String, upsert: Boolean) instead",
     "0.7.29"
   )
-  def updateAsync(index: String, `type`: String, id: String, source: String, upsert: Boolean)(
+  def updateAsync(index: String, indexType: String, id: String, source: String, upsert: Boolean)(
     implicit ec: ExecutionContext
   ): Future[Boolean] = {
     this.updateAsync(index, id, source, upsert)
@@ -250,12 +250,12 @@ trait DeleteApi { _: RefreshApi =>
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U]): Boolean = {
-    val `type` = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    delete(entity.uuid, index.getOrElse(`type`))
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    delete(entity.uuid, index.getOrElse(indexType))
   }
 
   @deprecated("Use delete(uuid: String, index: String) instead", "0.7.29")
-  def delete(uuid: String, index: String, `type`: String): Boolean = {
+  def delete(uuid: String, index: String, indexType: String): Boolean = {
     this.delete(uuid, index)
   }
 
@@ -266,12 +266,12 @@ trait DeleteApi { _: RefreshApi =>
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U], ec: ExecutionContext): Future[Boolean] = {
-    val `type` = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    deleteAsync(entity.uuid, index.getOrElse(`type`))
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    deleteAsync(entity.uuid, index.getOrElse(indexType))
   }
 
   @deprecated("Use deleteAsync(uuid: String, index: String) instead", "0.7.29")
-  def deleteAsync(uuid: String, index: String, `type`: String)(implicit
+  def deleteAsync(uuid: String, index: String, indexType: String)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
     this.deleteAsync(uuid, index)
