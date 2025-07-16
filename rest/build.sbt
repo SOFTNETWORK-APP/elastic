@@ -12,7 +12,7 @@ val jacksonExclusions = Seq(
 
 val rest = Seq(
   "org.elasticsearch" % "elasticsearch" % Versions.elasticSearch exclude ("org.apache.logging.log4j", "log4j-api"),
-  "org.elasticsearch.client" % "elasticsearch-rest-high-level-client" % Versions.rest exclude ("org.elasticsearch", "elasticsearch"),
+  "co.elastic.clients" % "elasticsearch-java" % Versions.rest exclude ("org.elasticsearch", "elasticsearch"),
   "org.elasticsearch.client" % "elasticsearch-rest-client" % Versions.rest
 ).map(_.excludeAll(jacksonExclusions: _*))
 

@@ -20,9 +20,9 @@ object Versions {
 
   val log4s = "1.8.2"
 
-  val elasticSearch = "7.17.29"
+  val elasticSearch = "8.18.2"
 
-  val elastic4s = "7.17.4"
+  val elastic4s = "8.18.2"
 
   val jest = "6.3.1"
 
@@ -34,5 +34,5 @@ object Versions {
 
   val gson = "2.8.0"
 
-  val rest = "7.17.29" // rest high level client
+  val rest = "8.18.2" // rest high level client
 }

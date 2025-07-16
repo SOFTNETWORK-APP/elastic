@@ -16,7 +16,7 @@ val jackson = Seq(
 )
 
 val elastic4s = Seq(
-  "com.sksamuel.elastic4s" %% "elastic4s-core"     % Versions.elastic4s exclude ("org.elasticsearch", "elasticsearch") exclude("org.slf4j", "slf4j-api"),
+  "nl.gn0s1s" %% "elastic4s-core"     % Versions.elastic4s exclude ("org.elasticsearch", "elasticsearch") exclude("org.slf4j", "slf4j-api"),
 )
 
 val scalatest = Seq(
