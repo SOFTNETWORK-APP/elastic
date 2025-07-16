@@ -1,6 +1,6 @@
 package app.softnetwork.elastic.sql
 
-import com.sksamuel.elastic4s.searches.MultiSearchRequest
+import com.sksamuel.elastic4s.requests.searches.MultiSearchRequest
 
 case class SQLMultiSearchRequest(requests: Seq[SQLSearchRequest]) extends SQLToken {
   override def sql: String = s"${requests.map(_.sql).mkString(" union ")}"

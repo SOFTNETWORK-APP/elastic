@@ -9,7 +9,9 @@ import org.elasticsearch.client.RestHighLevelClient
 
 object RestHighLevelProviders {
 
-  class PersonProvider(es: Config) extends RestHighLevelClientProvider[Person] with ManifestWrapper[Person] {
+  class PersonProvider(es: Config)
+      extends RestHighLevelClientProvider[Person]
+      with ManifestWrapper[Person] {
     override protected val manifestWrapper: ManifestW = ManifestW()
 
     override lazy val config: Config = es
@@ -17,7 +19,9 @@ object RestHighLevelProviders {
     implicit lazy val jestClient: RestHighLevelClient = apply()
   }
 
-  class SampleProvider(es: Config) extends RestHighLevelClientProvider[Sample] with ManifestWrapper[Sample] {
+  class SampleProvider(es: Config)
+      extends RestHighLevelClientProvider[Sample]
+      with ManifestWrapper[Sample] {
     override protected val manifestWrapper: ManifestW = ManifestW()
 
     override lazy val config: Config = es
@@ -25,7 +29,9 @@ object RestHighLevelProviders {
     implicit lazy val jestClient: RestHighLevelClient = apply()
   }
 
-  class BinaryProvider(es: Config) extends RestHighLevelClientProvider[Binary] with ManifestWrapper[Binary] {
+  class BinaryProvider(es: Config)
+      extends RestHighLevelClientProvider[Binary]
+      with ManifestWrapper[Binary] {
     override protected val manifestWrapper: ManifestW = ManifestW()
 
     override lazy val config: Config = es

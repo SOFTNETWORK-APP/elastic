@@ -1,8 +1,11 @@
 package app.softnetwork.elastic.sql
 
 import app.softnetwork.elastic.sql.Queries._
+import com.google.gson.{JsonArray, JsonObject, JsonParser, JsonPrimitive}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+
+import scala.collection.JavaConverters.asScalaIteratorConverter
 
 /** Created by smanciot on 13/04/17.
   */
@@ -419,7 +422,9 @@ class SQLQuerySpec extends AnyFlatSpec with Matchers {
         |limit 100""".stripMargin).search
     select.isDefined shouldBe true
     val result = select.get
-    result.query shouldBe
+    val query = result.query
+    val queryWithoutSource = query.substring(0, query.indexOf("_source") - 2) + "}"
+    queryWithoutSource shouldBe
     """{
       |    "query": {
       |        "bool": {
@@ -459,19 +464,28 @@ class SQLQuerySpec extends AnyFlatSpec with Matchers {
       |        }
       |    },
       |    "from": 0,
-      |    "size": 100,
-      |    "_source": {
-      |        "includes": [
-      |            "profileId",
-      |            "profile_ccm.email",
-      |            "profile_ccm.city",
-      |            "profile_ccm.firstName",
-      |            "profile_ccm.lastName",
-      |            "profile_ccm.postalCode",
-      |            "profile_ccm.birthYear"
-      |        ]
-      |    }
+      |    "size": 100
       |}""".stripMargin.replaceAll("\\s+", "")
+    val includes = new JsonParser()
+      .parse(query.substring(query.indexOf("_source") + 9, query.length - 1))
+      .asInstanceOf[JsonObject]
+      .get("includes")
+      .asInstanceOf[JsonArray]
+      .iterator()
+      .asScala
+    val sourceIncludes: Seq[String] = (
+      for (i <- includes) yield i.asInstanceOf[JsonPrimitive].getAsString
+    ).toSeq
+    val expectedSourceIncludes = Seq(
+      "profileId",
+      "profile_ccm.email",
+      "profile_ccm.city",
+      "profile_ccm.firstName",
+      "profile_ccm.lastName",
+      "profile_ccm.postalCode",
+      "profile_ccm.birthYear"
+    )
+    sourceIncludes should contain theSameElementsAs expectedSourceIncludes
   }
 
   it should "exclude fields from select" in {

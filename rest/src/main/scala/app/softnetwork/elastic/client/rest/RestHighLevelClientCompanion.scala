@@ -1,18 +1,18 @@
 package app.softnetwork.elastic.client.rest
 
 import app.softnetwork.elastic.client.ElasticConfig
-import com.sksamuel.exts.Logging
+import com.typesafe.scalalogging.StrictLogging
 import org.apache.http.HttpHost
 import org.apache.http.auth.{AuthScope, UsernamePasswordCredentials}
 import org.apache.http.impl.client.BasicCredentialsProvider
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder
 import org.elasticsearch.client.{RestClient, RestClientBuilder, RestHighLevelClient}
 import org.elasticsearch.common.settings.Settings
-import org.elasticsearch.common.xcontent.NamedXContentRegistry
+import org.elasticsearch.xcontent.NamedXContentRegistry
 import org.elasticsearch.plugins.SearchPlugin
 import org.elasticsearch.search.SearchModule
 
-trait RestHighLevelClientCompanion extends Logging {
+trait RestHighLevelClientCompanion extends StrictLogging {
 
   def elasticConfig: ElasticConfig
 

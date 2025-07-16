@@ -31,7 +31,7 @@ trait MockElasticClientApi extends ElasticClientApi {
 
   override def createIndex(index: String, settings: String): Boolean = true
 
-  override def setMapping(index: String, _type: String, mapping: String): Boolean = true
+  override def setMapping(index: String, mapping: String): Boolean = true
 
   override def deleteIndex(index: String): Boolean = true
 
@@ -97,10 +97,10 @@ trait MockElasticClientApi extends ElasticClientApi {
     Future.successful(true)
   }
 
-  override def index(index: String, _type: String, id: String, source: String): Boolean =
+  override def index(index: String, id: String, source: String): Boolean =
     throw new UnsupportedOperationException
 
-  override def indexAsync(index: String, _type: String, id: String, source: String)(implicit
+  override def indexAsync(index: String, id: String, source: String)(implicit
     ec: ExecutionContext
   ): Future[Boolean] =
     throw new UnsupportedOperationException
@@ -127,7 +127,6 @@ trait MockElasticClientApi extends ElasticClientApi {
 
   override def update(
     index: String,
-    _type: String,
     id: String,
     source: String,
     upsert: Boolean
@@ -138,13 +137,12 @@ trait MockElasticClientApi extends ElasticClientApi {
 
   override def updateAsync(
     index: String,
-    _type: String,
     id: String,
     source: String,
     upsert: Boolean
   )(implicit ec: ExecutionContext): Future[Boolean] = Future.successful(false)
 
-  override def delete(uuid: String, index: String, _type: String): Boolean = {
+  override def delete(uuid: String, index: String): Boolean = {
     if (elasticDocuments.get(uuid).isDefined) {
       elasticDocuments.delete(uuid)
       true
@@ -153,10 +151,10 @@ trait MockElasticClientApi extends ElasticClientApi {
     }
   }
 
-  override def deleteAsync(uuid: String, index: String, _type: String)(implicit
+  override def deleteAsync(uuid: String, index: String)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
-    Future.successful(delete(uuid, index, _type))
+    Future.successful(delete(uuid, index))
   }
 
   override def refresh(index: String): Boolean = true
@@ -212,7 +210,7 @@ trait MockElasticClientApi extends ElasticClientApi {
     formats: Formats
   ): List[(U, List[I])] = List.empty
 
-  override def getMapping(index: String, _type: String): String =
+  override def getMapping(index: String): String =
     throw new UnsupportedOperationException
 
   override def aggregate(sqlQuery: SQLQuery)(implicit

@@ -1,6 +1,6 @@
 package app.softnetwork.elastic.sql
 
-import com.sksamuel.elastic4s.searches.{MultiSearchRequest, SearchRequest}
+import com.sksamuel.elastic4s.requests.searches.{MultiSearchRequest, SearchRequest}
 
 /** Created by smanciot on 27/06/2018.
   */

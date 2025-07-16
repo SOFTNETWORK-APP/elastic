@@ -11,7 +11,6 @@ import app.softnetwork.serialization.serialization
 import com.google.gson.JsonParser
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions
-import org.elasticsearch.action.admin.indices.close.CloseIndexRequest
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest
 import org.elasticsearch.action.admin.indices.flush.FlushRequest
 import org.elasticsearch.action.admin.indices.open.OpenIndexRequest
@@ -27,18 +26,18 @@ import org.elasticsearch.action.update.{UpdateRequest, UpdateResponse}
 import org.elasticsearch.action.{ActionListener, DocWriteRequest}
 import org.elasticsearch.client.RequestOptions
 import org.elasticsearch.client.core.{CountRequest, CountResponse}
-import org.elasticsearch.client.indices.{CreateIndexRequest, GetMappingsRequest, PutMappingRequest}
+import org.elasticsearch.client.indices.{
+  CloseIndexRequest,
+  CreateIndexRequest,
+  GetMappingsRequest,
+  PutMappingRequest
+}
 import org.elasticsearch.common.io.stream.InputStreamStreamInput
-import org.elasticsearch.common.xcontent.{DeprecationHandler, XContentType}
+import org.elasticsearch.xcontent.{DeprecationHandler, XContentType}
 import org.elasticsearch.rest.RestStatus
 import org.elasticsearch.search.aggregations.bucket.filter.Filter
 import org.elasticsearch.search.aggregations.bucket.nested.Nested
-import org.elasticsearch.search.aggregations.metrics.avg.Avg
-import org.elasticsearch.search.aggregations.metrics.cardinality.Cardinality
-import org.elasticsearch.search.aggregations.metrics.max.Max
-import org.elasticsearch.search.aggregations.metrics.min.Min
-import org.elasticsearch.search.aggregations.metrics.sum.Sum
-import org.elasticsearch.search.aggregations.metrics.valuecount.ValueCount
+import org.elasticsearch.search.aggregations.metrics.{Avg, Cardinality, Max, Min, Sum, ValueCount}
 import org.elasticsearch.search.builder.SearchSourceBuilder
 import org.json4s.Formats
 
@@ -148,7 +147,7 @@ trait RestHighLevelClientSettingsApi extends SettingsApi with RestHighLevelClien
 }
 
 trait RestHighLevelClientMappingApi extends MappingApi with RestHighLevelClientCompanion {
-  override def setMapping(index: String, `type`: String, mapping: String): Boolean = {
+  override def setMapping(index: String, mapping: String): Boolean = {
     apply()
       .indices()
       .putMapping(
@@ -159,7 +158,7 @@ trait RestHighLevelClientMappingApi extends MappingApi with RestHighLevelClientC
       .isAcknowledged
   }
 
-  override def getMapping(index: String, `type`: String): String = {
+  override def getMapping(index: String): String = {
     apply()
       .indices()
       .getMapping(
@@ -340,10 +339,11 @@ trait RestHighLevelClientSingleValueAggregateApi
 
 trait RestHighLevelClientIndexApi extends IndexApi with RestHighLevelClientCompanion {
   _: RestHighLevelClientRefreshApi =>
-  override def index(index: String, _type: String, id: String, source: String): Boolean = {
+  override def index(index: String, id: String, source: String): Boolean = {
     apply()
       .index(
-        new IndexRequest(index, _type, id)
+        new IndexRequest(index)
+          .id(id)
           .source(source, XContentType.JSON),
         RequestOptions.DEFAULT
       )
@@ -351,12 +351,13 @@ trait RestHighLevelClientIndexApi extends IndexApi with RestHighLevelClientCompa
       .getStatus < 400
   }
 
-  override def indexAsync(index: String, _type: String, id: String, source: String)(implicit
+  override def indexAsync(index: String, id: String, source: String)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
     val promise: Promise[Boolean] = Promise()
     apply().indexAsync(
-      new IndexRequest(index, _type, id)
+      new IndexRequest(index)
+        .id(id)
         .source(source, XContentType.JSON),
       RequestOptions.DEFAULT,
       new ActionListener[IndexResponse] {
@@ -374,14 +375,13 @@ trait RestHighLevelClientUpdateApi extends UpdateApi with RestHighLevelClientCom
   _: RestHighLevelClientRefreshApi =>
   override def update(
     index: String,
-    _type: String,
     id: String,
     source: String,
     upsert: Boolean
   ): Boolean = {
     apply()
       .update(
-        new UpdateRequest(index, _type, id)
+        new UpdateRequest(index, id)
           .doc(source, XContentType.JSON)
           .docAsUpsert(upsert),
         RequestOptions.DEFAULT
@@ -392,14 +392,13 @@ trait RestHighLevelClientUpdateApi extends UpdateApi with RestHighLevelClientCom
 
   override def updateAsync(
     index: String,
-    _type: String,
     id: String,
     source: String,
     upsert: Boolean
   )(implicit ec: ExecutionContext): Future[Boolean] = {
     val promise: Promise[Boolean] = Promise()
     apply().updateAsync(
-      new UpdateRequest(index, _type, id)
+      new UpdateRequest(index, id)
         .doc(source, XContentType.JSON)
         .docAsUpsert(upsert),
       RequestOptions.DEFAULT,
@@ -417,22 +416,22 @@ trait RestHighLevelClientUpdateApi extends UpdateApi with RestHighLevelClientCom
 trait RestHighLevelClientDeleteApi extends DeleteApi with RestHighLevelClientCompanion {
   _: RestHighLevelClientRefreshApi =>
 
-  override def delete(uuid: String, index: String, _type: String): Boolean = {
+  override def delete(uuid: String, index: String): Boolean = {
     apply()
       .delete(
-        new DeleteRequest(index, _type, uuid),
+        new DeleteRequest(index, uuid),
         RequestOptions.DEFAULT
       )
       .status()
       .getStatus < 400
   }
 
-  override def deleteAsync(uuid: String, index: String, _type: String)(implicit
+  override def deleteAsync(uuid: String, index: String)(implicit
     ec: ExecutionContext
   ): Future[Boolean] = {
     val promise: Promise[Boolean] = Promise()
     apply().deleteAsync(
-      new DeleteRequest(index, _type, uuid),
+      new DeleteRequest(index, uuid),
       RequestOptions.DEFAULT,
       new ActionListener[DeleteResponse] {
         override def onResponse(response: DeleteResponse): Unit =
@@ -459,7 +458,6 @@ trait RestHighLevelClientGetApi extends GetApi with RestHighLevelClientCompanion
               m.runtimeClass.getSimpleName.toLowerCase
             )
           ),
-          maybeType.getOrElse("_all"),
           id
         ),
         RequestOptions.DEFAULT
@@ -509,7 +507,6 @@ trait RestHighLevelClientGetApi extends GetApi with RestHighLevelClientCompanion
             m.runtimeClass.getSimpleName.toLowerCase
           )
         ),
-        maybeType.getOrElse("_all"),
         id
       ),
       RequestOptions.DEFAULT,
@@ -551,7 +548,7 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
         ),
       RequestOptions.DEFAULT
     )
-    if (response.getHits.getTotalHits > 0) {
+    if (response.getHits.getTotalHits.value > 0) {
       response.getHits.getHits.toList.map { hit =>
         logger.info(s"Deserializing hit: ${hit.getSourceAsString}")
         serialization.read[U](hit.getSourceAsString)
@@ -601,7 +598,7 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
           RequestOptions.DEFAULT,
           new ActionListener[SearchResponse] {
             override def onResponse(response: SearchResponse): Unit = {
-              if (response.getHits.getTotalHits > 0) {
+              if (response.getHits.getTotalHits.value > 0) {
                 promise.success(response.getHits.getHits.toList.map { hit =>
                   serialization.read[U](hit.getSourceAsString)
                 })
@@ -799,19 +796,19 @@ trait RestHighLevelClientBulkApi
     import bulkItem._
     val request = action match {
       case BulkAction.UPDATE =>
-        val r = new UpdateRequest(index, null, if (id.isEmpty) null else id.get)
+        val r = new UpdateRequest(index, if (id.isEmpty) null else id.get)
           .doc(body, XContentType.JSON)
           .docAsUpsert(true)
-        parent.foreach(r.parent)
+//        parent.foreach(r.parent)
         r
       case BulkAction.DELETE =>
         val r = new DeleteRequest(index).id(id.getOrElse("_all"))
-        parent.foreach(r.parent)
+//        parent.foreach(r.parent)
         r
       case _ =>
         val r = new IndexRequest(index).source(body, XContentType.JSON)
         id.foreach(r.id)
-        parent.foreach(r.parent)
+//        parent.foreach(r.parent)
         r
     }
     request
@@ -839,7 +836,7 @@ trait RestHighLevelClientBulkApi
     Flow[Seq[A]]
       .named("bulk")
       .mapAsyncUnordered[R](parallelism) { items =>
-        val request = new BulkRequest(bulkOptions.index, bulkOptions.documentType)
+        val request = new BulkRequest(bulkOptions.index)
         items.foreach(request.add)
         val promise: Promise[R] = Promise[R]()
         apply().bulkAsync(
