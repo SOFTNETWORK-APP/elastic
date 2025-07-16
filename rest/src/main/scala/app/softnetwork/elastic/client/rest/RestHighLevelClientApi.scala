@@ -26,7 +26,12 @@ import org.elasticsearch.action.update.{UpdateRequest, UpdateResponse}
 import org.elasticsearch.action.{ActionListener, DocWriteRequest}
 import org.elasticsearch.client.RequestOptions
 import org.elasticsearch.client.core.{CountRequest, CountResponse}
-import org.elasticsearch.client.indices.{CloseIndexRequest, CreateIndexRequest, GetMappingsRequest, PutMappingRequest}
+import org.elasticsearch.client.indices.{
+  CloseIndexRequest,
+  CreateIndexRequest,
+  GetMappingsRequest,
+  PutMappingRequest
+}
 import org.elasticsearch.common.io.stream.InputStreamStreamInput
 import org.elasticsearch.xcontent.{DeprecationHandler, XContentType}
 import org.elasticsearch.rest.RestStatus

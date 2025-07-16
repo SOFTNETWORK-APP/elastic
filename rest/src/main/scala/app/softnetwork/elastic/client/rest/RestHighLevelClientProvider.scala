@@ -4,7 +4,9 @@ import app.softnetwork.elastic.persistence.query.ElasticProvider
 import app.softnetwork.persistence.ManifestWrapper
 import app.softnetwork.persistence.model.Timestamped
 
-trait RestHighLevelClientProvider [T <: Timestamped] extends ElasticProvider[T] with RestHighLevelClientApi {
+trait RestHighLevelClientProvider[T <: Timestamped]
+    extends ElasticProvider[T]
+    with RestHighLevelClientApi {
   _: ManifestWrapper[T] =>
 
 }
