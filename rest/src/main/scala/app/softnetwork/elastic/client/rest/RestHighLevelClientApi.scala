@@ -11,7 +11,6 @@ import app.softnetwork.serialization.serialization
 import com.google.gson.JsonParser
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesRequest.AliasActions
-import org.elasticsearch.client.indices.CloseIndexRequest
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest
 import org.elasticsearch.action.admin.indices.flush.FlushRequest
 import org.elasticsearch.action.admin.indices.open.OpenIndexRequest
@@ -27,18 +26,13 @@ import org.elasticsearch.action.update.{UpdateRequest, UpdateResponse}
 import org.elasticsearch.action.{ActionListener, DocWriteRequest}
 import org.elasticsearch.client.RequestOptions
 import org.elasticsearch.client.core.{CountRequest, CountResponse}
-import org.elasticsearch.client.indices.{CreateIndexRequest, GetMappingsRequest, PutMappingRequest}
+import org.elasticsearch.client.indices.{CloseIndexRequest, CreateIndexRequest, GetMappingsRequest, PutMappingRequest}
 import org.elasticsearch.common.io.stream.InputStreamStreamInput
 import org.elasticsearch.xcontent.{DeprecationHandler, XContentType}
 import org.elasticsearch.rest.RestStatus
 import org.elasticsearch.search.aggregations.bucket.filter.Filter
 import org.elasticsearch.search.aggregations.bucket.nested.Nested
-import org.elasticsearch.search.aggregations.metrics.Avg
-import org.elasticsearch.search.aggregations.metrics.Cardinality
-import org.elasticsearch.search.aggregations.metrics.Max
-import org.elasticsearch.search.aggregations.metrics.Min
-import org.elasticsearch.search.aggregations.metrics.Sum
-import org.elasticsearch.search.aggregations.metrics.ValueCount
+import org.elasticsearch.search.aggregations.metrics.{Avg, Cardinality, Max, Min, Sum, ValueCount}
 import org.elasticsearch.search.builder.SearchSourceBuilder
 import org.json4s.Formats
 

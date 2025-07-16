@@ -2,9 +2,8 @@ package app.softnetwork.elastic.scalatest
 
 import app.softnetwork.concurrent.scalatest.CompletionTestKit
 import com.sksamuel.elastic4s.http.JavaClient
-import com.sksamuel.elastic4s.Indexes
 import com.sksamuel.elastic4s.requests.indexes.admin.RefreshIndexResponse
-import com.sksamuel.elastic4s.{ElasticClient, ElasticDsl, ElasticProperties}
+import com.sksamuel.elastic4s.{ElasticClient, ElasticDsl, Indexes}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.http.HttpHost
 import org.elasticsearch.ResourceAlreadyExistsException

@@ -1,8 +1,7 @@
 package app.softnetwork.elastic.sql
 
 import com.sksamuel.elastic4s.ElasticApi.matchAllQuery
-import com.sksamuel.elastic4s.requests.searches.SearchBodyBuilderFn
-import com.sksamuel.elastic4s.requests.searches.SearchRequest
+import com.sksamuel.elastic4s.requests.searches.{SearchBodyBuilderFn, SearchRequest}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 

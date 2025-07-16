@@ -1,7 +1,6 @@
 package app.softnetwork.elastic.sql
 
-import com.sksamuel.elastic4s.requests.searches.SearchBodyBuilderFn
-import com.sksamuel.elastic4s.requests.searches.SearchRequest
+import com.sksamuel.elastic4s.requests.searches.{SearchBodyBuilderFn, SearchRequest}
 
 case class ElasticSearchRequest(
   fields: Seq[SQLField],

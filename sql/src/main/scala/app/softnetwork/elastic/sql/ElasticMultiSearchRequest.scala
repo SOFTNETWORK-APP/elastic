@@ -1,7 +1,6 @@
 package app.softnetwork.elastic.sql
 
-import com.sksamuel.elastic4s.requests.searches.MultiSearchBuilderFn
-import com.sksamuel.elastic4s.requests.searches.MultiSearchRequest
+import com.sksamuel.elastic4s.requests.searches.{MultiSearchBuilderFn, MultiSearchRequest}
 
 case class ElasticMultiSearchRequest(
   requests: Seq[ElasticSearchRequest],
