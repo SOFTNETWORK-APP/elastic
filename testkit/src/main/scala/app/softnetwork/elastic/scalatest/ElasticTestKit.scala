@@ -8,7 +8,7 @@ import com.sksamuel.elastic4s.{ElasticClient, ElasticDsl, ElasticProperties}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.http.HttpHost
 import org.elasticsearch.ResourceAlreadyExistsException
-import org.elasticsearch.client.{Node, RestClient}
+import org.elasticsearch.client.RestClient
 import org.elasticsearch.transport.RemoteTransportException
 import org.scalatest.{BeforeAndAfterAll, Suite}
 import org.scalatest.matchers.{MatchResult, Matcher}
@@ -48,9 +48,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
     new JavaClient(
       RestClient
         .builder(
-          ElasticProperties(elasticURL).endpoints.map(endpoint =>
-            new Node(new HttpHost(endpoint.host, endpoint.port, endpoint.protocol))
-          ): _*
+          HttpHost.create(elasticURL)
         )
         .build()
     )
