@@ -1,7 +1,7 @@
 package app.softnetwork.elastic.sql
 
 import com.sksamuel.elastic4s.ElasticApi._
-import com.sksamuel.elastic4s.searches.queries.Query
+import com.sksamuel.elastic4s.requests.searches.queries.Query
 import SQLImplicits._
 
 case object Where extends SQLExpr("where") with SQLRegex

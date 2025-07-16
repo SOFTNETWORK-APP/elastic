@@ -11,7 +11,7 @@ import com.sksamuel.elastic4s.ElasticApi.{
   sumAgg,
   valueCountAgg
 }
-import com.sksamuel.elastic4s.searches.aggs.Aggregation
+import com.sksamuel.elastic4s.requests.searches.aggs.Aggregation
 
 case object Select extends SQLExpr("select") with SQLRegex
 

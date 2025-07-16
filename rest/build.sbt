@@ -4,6 +4,9 @@ name := "elastic-rest-client"
 
 val jacksonExclusions = Seq(
   ExclusionRule(organization = "com.fasterxml.jackson.core"),
+  ExclusionRule(organization = "com.fasterxml.jackson.dataformat"),
+  ExclusionRule(organization = "com.fasterxml.jackson.datatype"),
+  ExclusionRule(organization = "com.fasterxml.jackson.module"),
   ExclusionRule(organization = "org.codehaus.jackson")
 )
 

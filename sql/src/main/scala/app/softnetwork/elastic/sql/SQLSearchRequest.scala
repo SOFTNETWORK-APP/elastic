@@ -1,8 +1,8 @@
 package app.softnetwork.elastic.sql
 
 import com.sksamuel.elastic4s.ElasticApi.{matchAllQuery, search}
-import com.sksamuel.elastic4s.searches.SearchRequest
-import com.sksamuel.elastic4s.searches.sort.FieldSort
+import com.sksamuel.elastic4s.requests.searches.SearchRequest
+import com.sksamuel.elastic4s.requests.searches.sort.FieldSort
 
 case class SQLSearchRequest(
   select: SQLSelect = SQLSelect(),

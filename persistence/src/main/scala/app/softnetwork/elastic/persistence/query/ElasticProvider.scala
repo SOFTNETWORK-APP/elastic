@@ -9,14 +9,14 @@ import app.softnetwork.persistence.model.Timestamped
 import app.softnetwork.persistence.query.ExternalPersistenceProvider
 import app.softnetwork.serialization.commonFormats
 import app.softnetwork.elastic.persistence.typed.Elastic._
-import com.sksamuel.exts.Logging
+import com.typesafe.scalalogging.StrictLogging
 
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 /** Created by smanciot on 16/05/2020.
   */
-trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] with Logging {
+trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] with StrictLogging {
   _: ElasticClientApi with ManifestWrapper[T] =>
 
   implicit def formats: Formats = commonFormats
@@ -44,7 +44,7 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
     Try {
       createIndex(index)
       addAlias(index, alias)
-      setMapping(index, _type, loadMapping(mappingPath))
+      setMapping(index, loadMapping(mappingPath))
     } match {
       case Success(_) => logger.info(s"index:$index type:${_type} alias:$alias created")
       case Failure(f) =>
@@ -102,7 +102,7 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
     */
   override def deleteDocument(uuid: String): Boolean = {
     Try(
-      delete(uuid, index, _type)
+      delete(uuid, index)
     ) match {
       case Success(value) => value && refresh(index)
       case Failure(f) =>
@@ -121,13 +121,12 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
     *   whether the operation is successful or not
     */
   override def upsertDocument(uuid: String, data: String): Boolean = {
-    if (logger.isDebugEnabled) {
+    logger.whenDebugEnabled {
       logger.debug(s"Upserting document $uuid for index $index with $data")
     }
     Try(
       update(
         index,
-        _type,
         uuid,
         data,
         upsert = true

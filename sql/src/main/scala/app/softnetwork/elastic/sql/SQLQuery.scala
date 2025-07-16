@@ -1,7 +1,7 @@
 package app.softnetwork.elastic.sql
 
 import com.sksamuel.elastic4s.ElasticApi
-import com.sksamuel.elastic4s.http.search.SearchBodyBuilderFn
+import com.sksamuel.elastic4s.requests.searches.SearchBodyBuilderFn
 
 case class SQLQuery(query: String, score: Option[Double] = None) {
   import SQLImplicits._

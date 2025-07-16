@@ -1,6 +1,6 @@
 package app.softnetwork.elastic.sql
 
-import com.sksamuel.elastic4s.searches.aggs.Aggregation
+import com.sksamuel.elastic4s.requests.searches.aggs.Aggregation
 
 case class ElasticAggregation(
   aggName: String,
