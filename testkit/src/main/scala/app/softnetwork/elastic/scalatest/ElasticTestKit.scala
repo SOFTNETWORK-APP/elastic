@@ -1,6 +1,7 @@
 package app.softnetwork.elastic.scalatest
 
 import app.softnetwork.concurrent.scalatest.CompletionTestKit
+import app.softnetwork.elastic.ElasticTestkitBuildInfo
 import com.sksamuel.elastic4s.http.JavaClient
 import com.sksamuel.elastic4s.requests.indexes.admin.RefreshIndexResponse
 import com.sksamuel.elastic4s.{ElasticClient, ElasticDsl, Indexes}
@@ -13,7 +14,6 @@ import org.scalatest.{BeforeAndAfterAll, Suite}
 import org.scalatest.matchers.{MatchResult, Matcher}
 import org.slf4j.Logger
 
-import java.util.UUID
 import scala.util.{Failure, Success}
 
 /** Created by smanciot on 18/05/2021.
@@ -22,7 +22,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def log: Logger
 
-  def elasticVersion: String = "7.17.28"
+  def elasticVersion: String = ElasticTestkitBuildInfo.version
 
   def elasticURL: String
 
@@ -40,8 +40,6 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
        |  discovery-enabled = false
        |}
        |""".stripMargin
-
-  lazy val clusterName: String = s"test-${UUID.randomUUID()}"
 
   lazy val elasticClient: ElasticClient = ElasticClient(
     new JavaClient(
