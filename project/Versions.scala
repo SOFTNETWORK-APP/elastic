@@ -24,8 +24,6 @@ object Versions {
 
   val elastic4s = "7.17.4"
 
-  val jest = "6.3.1"
-
   val log4j = "2.8.2"
 
   val testContainers = "1.18.0"
@@ -34,5 +32,4 @@ object Versions {
 
   val gson = "2.8.0"
 
-  val rest = "7.17.29" // rest high level client
 }

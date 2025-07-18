@@ -46,6 +46,7 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.implicitConversions
 import scala.util.{Failure, Success, Try}
 
+@deprecated("Use app.softnetwork.elastic.client.java.ElasticsearchClientApi instead", "8.x")
 trait RestHighLevelClientApi
     extends ElasticClientApi
     with RestHighLevelClientIndicesApi
@@ -620,23 +621,6 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
     promise.future
   }
 
-  override def searchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[(U, List[I])] = {
-    sqlQuery.search match {
-      case Some(searchRequest) =>
-        val indices = collection.immutable.Seq(searchRequest.sources: _*)
-        val jsonQuery = JSONQuery(searchRequest.query, indices)
-        searchWithInnerHits(jsonQuery, innerField)
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
-    }
-  }
-
   override def searchWithInnerHits[U, I](jsonQuery: JSONQuery, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
@@ -664,26 +648,6 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
       case Failure(f) =>
         logger.error(f.getMessage, f)
         List.empty
-    }
-  }
-
-  override def multiSearch[U](
-    sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], formats: Formats): List[List[U]] = {
-    sqlQuery.multiSearch match {
-      case Some(multiSearchRequest) =>
-        val jsonQueries: JSONQueries = JSONQueries(
-          collection.immutable
-            .Seq(multiSearchRequest.requests.map { searchRequest =>
-              JSONQuery(searchRequest.query, collection.immutable.Seq(searchRequest.sources: _*))
-            }: _*)
-            .toList
-        )
-        multiSearch[U](jsonQueries)
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
     }
   }
 
@@ -717,28 +681,6 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
           serialization.read[U](hit.getSourceAsString)
         }
       }
-    }
-  }
-
-  override def multiSearchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[List[(U, List[I])]] = {
-    sqlQuery.multiSearch match {
-      case Some(multiSearchRequest) =>
-        val jsonQueries: JSONQueries = JSONQueries(
-          collection.immutable
-            .Seq(multiSearchRequest.requests.map { searchRequest =>
-              JSONQuery(searchRequest.query, collection.immutable.Seq(searchRequest.sources: _*))
-            }: _*)
-            .toList
-        )
-        multiSearchWithInnerHits[U, I](jsonQueries, innerField)
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
     }
   }
 
@@ -796,20 +738,13 @@ trait RestHighLevelClientBulkApi
     import bulkItem._
     val request = action match {
       case BulkAction.UPDATE =>
-        val r = new UpdateRequest(index, if (id.isEmpty) null else id.get)
+        new UpdateRequest(index, id.orNull)
           .doc(body, XContentType.JSON)
           .docAsUpsert(true)
-//        parent.foreach(r.parent)
-        r
       case BulkAction.DELETE =>
-        val r = new DeleteRequest(index).id(id.getOrElse("_all"))
-//        parent.foreach(r.parent)
-        r
+        new DeleteRequest(index).id(id.getOrElse("_all"))
       case _ =>
-        val r = new IndexRequest(index).source(body, XContentType.JSON)
-        id.foreach(r.id)
-//        parent.foreach(r.parent)
-        r
+        new IndexRequest(index).source(body, XContentType.JSON).id(id.orNull)
     }
     request
   }

@@ -16,7 +16,7 @@ object RestHighLevelProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val jestClient: RestHighLevelClient = apply()
+    implicit lazy val restHighLevelClient: RestHighLevelClient = apply()
   }
 
   class SampleProvider(es: Config)
@@ -26,7 +26,7 @@ object RestHighLevelProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val jestClient: RestHighLevelClient = apply()
+    implicit lazy val restHighLevelClient: RestHighLevelClient = apply()
   }
 
   class BinaryProvider(es: Config)
@@ -36,6 +36,6 @@ object RestHighLevelProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val jestClient: RestHighLevelClient = apply()
+    implicit lazy val restHighLevelClient: RestHighLevelClient = apply()
   }
 }

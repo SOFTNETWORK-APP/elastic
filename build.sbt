@@ -8,7 +8,7 @@ ThisBuild / organization := "app.softnetwork"
 
 name := "elastic"
 
-ThisBuild / version := "7.17.29"
+ThisBuild / version := Versions.elasticSearch
 
 ThisBuild / scalaVersion := "2.12.18"
 
@@ -75,7 +75,11 @@ lazy val rest = project.in(file("rest"))
 
 lazy val testKit = project.in(file("testkit"))
   .configs(IntegrationTest)
-  .settings(Defaults.itSettings)
+  .settings(
+    Defaults.itSettings,
+    app.softnetwork.Info.infoSettings
+  )
+  .enablePlugins(BuildInfoPlugin)
   .dependsOn(
     rest % "compile->compile;test->test;it->it"
   )
