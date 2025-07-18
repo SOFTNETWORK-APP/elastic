@@ -4,16 +4,9 @@ import java.io.ByteArrayInputStream
 import java.util.concurrent.TimeUnit
 import java.util.UUID
 import akka.actor.ActorSystem
-import com.sksamuel.elastic4s.mappings.TextField
-import app.softnetwork.elastic.client.jest.JestClientCompanion
 import app.softnetwork.elastic.sql.SQLQuery
 import com.fasterxml.jackson.core.JsonParseException
 import com.sksamuel.elastic4s.searches.queries.matches.MatchAllQuery
-import io.searchbox.client.JestClient
-import io.searchbox.indices.CreateIndex
-import io.searchbox.indices.aliases.AliasExists
-import io.searchbox.indices.mapping.PutMapping
-import io.searchbox.indices.settings.GetSettings
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import app.softnetwork.persistence._
@@ -23,7 +16,6 @@ import app.softnetwork.elastic.persistence.query.ElasticProvider
 import app.softnetwork.elastic.scalatest.EmbeddedElasticTestKit
 import app.softnetwork.persistence.person.model.Person
 import org.json4s.Formats
-import org.json4s.scalap.scalasig.ScalaSigEntryParsers.index
 import org.slf4j.{Logger, LoggerFactory}
 
 import java.nio.file.{Files, Paths}
@@ -46,13 +38,6 @@ trait ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
   def pClient: ElasticProvider[Person] with ElasticClientApi
   def sClient: ElasticProvider[Sample] with ElasticClientApi
   def bClient: ElasticProvider[Binary] with ElasticClientApi
-
-  lazy val jestClient: JestClient = {
-    val config = elasticConfig
-    new JestClientCompanion {
-      override def elasticConfig: ElasticConfig = ElasticConfig(config)
-    }.apply()
-  }
 
   import scala.language.implicitConversions
 
@@ -149,13 +134,11 @@ trait ElasticClientSpec extends AnyFlatSpecLike with EmbeddedElasticTestKit with
   }
 
   "Bulk index valid json with an id key but no suffix key" should "work" in {
-    elasticClient.execute(createIndex("person2"))
-    val childMapping = new PutMapping.Builder(
-      "person2",
-      "child",
-      "{ \"child\" : { \"_parent\" : {\"type\": \"person\"}, \"properties\" : { \"name\" : {\"type\" : \"string\", \"index\" : \"not_analyzed\"} } } }"
-    ).build()
-    jestClient.execute(childMapping)
+    elasticClient.execute {
+      createIndex("person2").mappings(
+        mapping("child").fields(textField("name").index(false)).parent("person")
+      )
+    }
 
     implicit val bulkOptions: BulkOptions = BulkOptions("person2", "person", 1000)
     val indices = pClient.bulk[String](persons.iterator, identity, Some("uuid"), None, None)
