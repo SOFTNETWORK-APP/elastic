@@ -8,7 +8,7 @@ import org.testcontainers.utility.DockerImageName
 import java.nio.file.{Files, Path}
 
 /** Created by smanciot on 28/06/2018.
- */
+  */
 trait ElasticDockerTestKit extends ElasticTestKit { _: Suite =>
 
   override lazy val elasticURL: String = s"http://${elasticContainer.getHttpHostAddress}"
