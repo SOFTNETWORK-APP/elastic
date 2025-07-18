@@ -21,32 +21,9 @@ import co.elastic.clients.elasticsearch.core.msearch.{
   MultisearchHeader,
   RequestItem
 }
-import co.elastic.clients.elasticsearch.core.{
-  BulkRequest,
-  BulkResponse,
-  CountRequest,
-  DeleteRequest,
-  GetRequest,
-  IndexRequest,
-  MsearchRequest,
-  SearchRequest,
-  UpdateRequest
-}
+import co.elastic.clients.elasticsearch.core._
 import co.elastic.clients.elasticsearch.indices.update_aliases.{Action, AddAction, RemoveAction}
-import co.elastic.clients.elasticsearch.indices.{
-  CloseIndexRequest,
-  CreateIndexRequest,
-  DeleteIndexRequest,
-  FlushRequest,
-  GetIndicesSettingsRequest,
-  GetMappingRequest,
-  IndexSettings,
-  OpenRequest,
-  PutIndicesSettingsRequest,
-  PutMappingRequest,
-  RefreshRequest,
-  UpdateAliasesRequest
-}
+import co.elastic.clients.elasticsearch.indices._
 import com.google.gson.JsonParser
 
 import _root_.java.io.StringReader
@@ -348,6 +325,26 @@ trait ElasticsearchClientIndexApi extends IndexApi with ElasticsearchClientCompa
       .intValue() == 0
   }
 
+  override def indexAsync(index: String, id: String, source: String)(implicit
+    ec: ExecutionContext
+  ): Future[Boolean] = {
+    fromCompletableFuture(
+      async()
+        .index(
+          new IndexRequest.Builder()
+            .index(index)
+            .id(id)
+            .withJson(new StringReader(source))
+            .build()
+        )
+    ).flatMap { response =>
+      if (response.shards().failed().intValue() == 0) {
+        Future.successful(true)
+      } else {
+        Future.failed(new Exception(s"Failed to index document with id: $id in index: $index"))
+      }
+    }
+  }
 }
 
 trait ElasticsearchClientUpdateApi extends UpdateApi with ElasticsearchClientCompanion {
@@ -373,6 +370,28 @@ trait ElasticsearchClientUpdateApi extends UpdateApi with ElasticsearchClientCom
       .intValue() == 0
   }
 
+  override def updateAsync(index: String, id: String, source: String, upsert: Boolean)(implicit
+    ec: ExecutionContext
+  ): Future[Boolean] = {
+    fromCompletableFuture(
+      async()
+        .update(
+          new UpdateRequest.Builder[JMap[String, Object], JMap[String, Object]]()
+            .index(index)
+            .id(id)
+            .doc(mapper.readValue(source, classOf[JMap[String, Object]]))
+            .docAsUpsert(upsert)
+            .build(),
+          classOf[JMap[String, Object]]
+        )
+    ).flatMap { response =>
+      if (response.shards().failed().intValue() == 0) {
+        Future.successful(true)
+      } else {
+        Future.failed(new Exception(s"Failed to update document with id: $id in index: $index"))
+      }
+    }
+  }
 }
 
 trait ElasticsearchClientDeleteApi extends DeleteApi with ElasticsearchClientCompanion {
@@ -386,6 +405,23 @@ trait ElasticsearchClientDeleteApi extends DeleteApi with ElasticsearchClientCom
       .shards()
       .failed()
       .intValue() == 0
+  }
+
+  override def deleteAsync(uuid: String, index: String)(implicit
+    ec: ExecutionContext
+  ): Future[Boolean] = {
+    fromCompletableFuture(
+      async()
+        .delete(
+          new DeleteRequest.Builder().index(index).id(uuid).build()
+        )
+    ).flatMap { response =>
+      if (response.shards().failed().intValue() == 0) {
+        Future.successful(true)
+      } else {
+        Future.failed(new Exception(s"Failed to delete document with id: $uuid in index: $index"))
+      }
+    }
   }
 
 }
@@ -443,6 +479,50 @@ trait ElasticsearchClientGetApi extends GetApi with ElasticsearchClientCompanion
     }
   }
 
+  override def getAsync[U <: Timestamped](
+    id: String,
+    index: Option[String] = None,
+    maybeType: Option[String] = None
+  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]] = {
+    fromCompletableFuture(
+      async()
+        .get(
+          new GetRequest.Builder()
+            .index(
+              index.getOrElse(
+                maybeType.getOrElse(
+                  m.runtimeClass.getSimpleName.toLowerCase
+                )
+              )
+            )
+            .id(id)
+            .build(),
+          classOf[JMap[String, Object]]
+        )
+    ).flatMap {
+      case response if response.found() =>
+        val source = mapper.writeValueAsString(response.source())
+        logger.info(s"Deserializing response $source for id: $id, index: ${index
+          .getOrElse("default")}, type: ${maybeType.getOrElse("_all")}")
+        // Deserialize the source string to the expected type
+        // Note: This assumes that the source is a valid JSON representation of U
+        // and that the serialization library is capable of handling it.
+        Try(serialization.read[U](source)) match {
+          case Success(value) => Future.successful(Some(value))
+          case Failure(f) =>
+            logger.error(
+              s"Failed to deserialize response $source for id: $id, index: ${index
+                .getOrElse("default")}, type: ${maybeType.getOrElse("_all")}",
+              f
+            )
+            Future.successful(None)
+        }
+      case _ => Future.successful(None)
+    }
+    Future {
+      this.get[U](id, index, maybeType)
+    }
+  }
 }
 
 trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCompanion {
@@ -484,6 +564,50 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
       case None =>
         throw new IllegalArgumentException(
           s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
+
+  override def searchAsync[U](
+    sqlQuery: SQLQuery
+  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] = {
+    sqlQuery.search match {
+      case Some(searchRequest) =>
+        val indices = collection.immutable.Seq(searchRequest.sources: _*)
+        fromCompletableFuture(
+          async()
+            .search(
+              new SearchRequest.Builder()
+                .index(indices.asJava)
+                .withJson(new StringReader(searchRequest.query))
+                .build(),
+              classOf[JMap[String, Object]]
+            )
+        ).flatMap {
+          case response if response.hits().total().value() > 0 =>
+            Future.successful(
+              response
+                .hits()
+                .hits()
+                .asScala
+                .map { hit =>
+                  val source = mapper.writeValueAsString(hit.source())
+                  logger.info(s"Deserializing hit: $source")
+                  serialization.read[U](source)
+                }
+                .toList
+            )
+          case _ =>
+            logger.warn(
+              s"No hits found for query: ${sqlQuery.query} on indices: ${indices.mkString(", ")}"
+            )
+            Future.successful(List.empty[U])
+        }
+      case None =>
+        Future.failed(
+          throw new IllegalArgumentException(
+            s"SQL query ${sqlQuery.query} does not contain a valid search request"
+          )
         )
     }
   }
@@ -675,11 +799,15 @@ trait ElasticsearchClientBulkApi
 
   override implicit def toBulkElasticAction(a: BulkOperation): BulkElasticAction =
     new BulkElasticAction {
-      override def index: String =
-        if (a.isIndex) a.index().index()
-        else if (a.isDelete) a.delete().index()
-        else if (a.isUpdate) a.update().index()
-        else throw new IllegalArgumentException("Unsupported bulk action type")
+      override def index: String = {
+        a match {
+          case op if op.isIndex  => op.index().index()
+          case op if op.isDelete => op.delete().index()
+          case op if op.isUpdate => op.update().index()
+          case _ =>
+            throw new IllegalArgumentException(s"Unsupported bulk operation type: ${a.getClass}")
+        }
+      }
     }
 
   override implicit def toBulkElasticResult(r: BulkResponse): BulkElasticResult = {
