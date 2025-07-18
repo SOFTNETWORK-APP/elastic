@@ -119,8 +119,8 @@ trait SettingsApi { _: IndicesApi =>
 }
 
 trait MappingApi {
-  def setMapping(index: String, _type: String, mapping: String): Boolean
-  def getMapping(index: String, _type: String): String
+  def setMapping(index: String, indexType: String, mapping: String): Boolean
+  def getMapping(index: String, indexType: String): String
 }
 
 trait RefreshApi {
@@ -137,29 +137,33 @@ trait IndexApi { _: RefreshApi =>
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U], formats: Formats): Boolean = {
-    val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     this.index(
-      index.getOrElse(_type),
-      _type,
+      index.getOrElse(indexType),
+      indexType,
       entity.uuid,
       serialization.write[U](entity)
     )
   }
 
-  def index(index: String, _type: String, id: String, source: String): Boolean
+  def index(index: String, indexType: String, id: String, source: String): Boolean
 
   def indexAsync[U <: Timestamped](
     entity: U,
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
-    val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    indexAsync(index.getOrElse(_type), _type, entity.uuid, serialization.write[U](entity))
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    indexAsync(index.getOrElse(indexType), indexType, entity.uuid, serialization.write[U](entity))
   }
 
-  def indexAsync(index: String, _type: String, id: String, source: String)(implicit
+  def indexAsync(index: String, indexType: String, id: String, source: String)(implicit
     ec: ExecutionContext
-  ): Future[Boolean]
+  ): Future[Boolean] = {
+    Future {
+      this.index(index, indexType, id, source)
+    }
+  }
 }
 
 trait UpdateApi { _: RefreshApi =>
@@ -169,17 +173,23 @@ trait UpdateApi { _: RefreshApi =>
     maybeType: Option[String] = None,
     upsert: Boolean = true
   )(implicit u: ClassTag[U], formats: Formats): Boolean = {
-    val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     this.update(
-      index.getOrElse(_type),
-      _type,
+      index.getOrElse(indexType),
+      indexType,
       entity.uuid,
       serialization.write[U](entity),
       upsert
     )
   }
 
-  def update(index: String, _type: String, id: String, source: String, upsert: Boolean): Boolean
+  def update(
+    index: String,
+    indexType: String,
+    id: String,
+    source: String,
+    upsert: Boolean
+  ): Boolean
 
   def updateAsync[U <: Timestamped](
     entity: U,
@@ -187,20 +197,24 @@ trait UpdateApi { _: RefreshApi =>
     maybeType: Option[String] = None,
     upsert: Boolean = true
   )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
-    val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
     this
       .updateAsync(
-        index.getOrElse(_type),
-        _type,
+        index.getOrElse(indexType),
+        indexType,
         entity.uuid,
         serialization.write[U](entity),
         upsert
       )
   }
 
-  def updateAsync(index: String, _type: String, id: String, source: String, upsert: Boolean)(
+  def updateAsync(index: String, indexType: String, id: String, source: String, upsert: Boolean)(
     implicit ec: ExecutionContext
-  ): Future[Boolean]
+  ): Future[Boolean] = {
+    Future {
+      this.update(index, indexType, id, source, upsert)
+    }
+  }
 }
 
 trait DeleteApi { _: RefreshApi =>
@@ -209,24 +223,28 @@ trait DeleteApi { _: RefreshApi =>
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U]): Boolean = {
-    val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    delete(entity.uuid, index.getOrElse(_type), _type)
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    delete(entity.uuid, index.getOrElse(indexType), indexType)
   }
 
-  def delete(uuid: String, index: String, _type: String): Boolean
+  def delete(uuid: String, index: String, indexType: String): Boolean
 
   def deleteAsync[U <: Timestamped](
     entity: U,
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit u: ClassTag[U], ec: ExecutionContext): Future[Boolean] = {
-    val _type = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
-    deleteAsync(entity.uuid, index.getOrElse(_type), _type)
+    val indexType = maybeType.getOrElse(u.runtimeClass.getSimpleName.toLowerCase)
+    deleteAsync(entity.uuid, index.getOrElse(indexType), indexType)
   }
 
-  def deleteAsync(uuid: String, index: String, _type: String)(implicit
+  def deleteAsync(uuid: String, index: String, indexType: String)(implicit
     ec: ExecutionContext
-  ): Future[Boolean]
+  ): Future[Boolean] = {
+    Future {
+      this.delete(uuid, index, indexType)
+    }
+  }
 
 }
 
@@ -277,9 +295,9 @@ trait BulkApi { _: RefreshApi with SettingsApi =>
     * |  balance |        |   bulk   |
     * |          |------->|          |
     * +----------+        +----------+
-    * |    |
-    * |    |
-    * |    |
+    *                        |    |
+    *                        |    |
+    *                        |    |
     * +---------+            |    |
     * |         |<-----------'    |
     * |  merge  |                 |
@@ -356,7 +374,7 @@ trait BulkApi { _: RefreshApi with SettingsApi =>
       val settings = b.add(BulkSettings[A](bulkOptions.disableRefresh)(this, toBulkElasticAction))
 
       val group = b.add(Flow[A].named("group").grouped(bulkOptions.maxBulkSize).map { items =>
-//          logger.info(s"Preparing to write batch of ${items.size}...")
+        //          logger.info(s"Preparing to write batch of ${items.size}...")
         items
       })
 
@@ -449,7 +467,11 @@ trait BulkApi { _: RefreshApi with SettingsApi =>
 }
 
 trait CountApi {
-  def countAsync(query: JSONQuery)(implicit ec: ExecutionContext): Future[Option[Double]]
+  def countAsync(query: JSONQuery)(implicit ec: ExecutionContext): Future[Option[Double]] = {
+    Future(
+      this.count(query)
+    )
+  }
 
   def count(query: JSONQuery): Option[Double]
 
@@ -474,7 +496,9 @@ trait GetApi {
     id: String,
     index: Option[String] = None,
     maybeType: Option[String] = None
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]]
+  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]] = {
+    Future(this.get[U](id, index, maybeType))
+  }
 }
 
 trait SearchApi {
@@ -485,13 +509,26 @@ trait SearchApi {
 
   def searchAsync[U](
     sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]]
+  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] = Future(
+    this.search[U](sqlQuery)
+  )
 
   def searchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
     formats: Formats
-  ): List[(U, List[I])]
+  ): List[(U, List[I])] = {
+    sqlQuery.search match {
+      case Some(searchRequest) =>
+        val indices = collection.immutable.Seq(searchRequest.sources: _*)
+        val jsonQuery = JSONQuery(searchRequest.query, indices)
+        searchWithInnerHits(jsonQuery, innerField)
+      case None =>
+        throw new IllegalArgumentException(
+          s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
 
   def searchWithInnerHits[U, I](jsonQuery: JSONQuery, innerField: String)(implicit
     m1: Manifest[U],
@@ -501,7 +538,23 @@ trait SearchApi {
 
   def multiSearch[U](
     sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], formats: Formats): List[List[U]]
+  )(implicit m: Manifest[U], formats: Formats): List[List[U]] = {
+    sqlQuery.multiSearch match {
+      case Some(multiSearchRequest) =>
+        val jsonQueries: JSONQueries = JSONQueries(
+          collection.immutable
+            .Seq(multiSearchRequest.requests.map { searchRequest =>
+              JSONQuery(searchRequest.query, collection.immutable.Seq(searchRequest.sources: _*))
+            }: _*)
+            .toList
+        )
+        multiSearch[U](jsonQueries)
+      case None =>
+        throw new IllegalArgumentException(
+          s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
 
   def multiSearch[U](
     jsonQueries: JSONQueries
@@ -511,7 +564,23 @@ trait SearchApi {
     m1: Manifest[U],
     m2: Manifest[I],
     formats: Formats
-  ): List[List[(U, List[I])]]
+  ): List[List[(U, List[I])]] = {
+    sqlQuery.multiSearch match {
+      case Some(multiSearchRequest) =>
+        val jsonQueries: JSONQueries = JSONQueries(
+          collection.immutable
+            .Seq(multiSearchRequest.requests.map { searchRequest =>
+              JSONQuery(searchRequest.query, collection.immutable.Seq(searchRequest.sources: _*))
+            }: _*)
+            .toList
+        )
+        multiSearchWithInnerHits[U, I](jsonQueries, innerField)
+      case None =>
+        throw new IllegalArgumentException(
+          s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
 
   def multiSearchWithInnerHits[U, I](jsonQueries: JSONQueries, innerField: String)(implicit
     m1: Manifest[U],

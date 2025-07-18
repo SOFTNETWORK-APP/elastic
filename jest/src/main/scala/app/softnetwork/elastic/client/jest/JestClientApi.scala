@@ -91,11 +91,13 @@ trait JestSettingsApi extends SettingsApi with JestClientCompanion {
 
 trait JestMappingApi extends MappingApi with JestClientCompanion {
   _: IndicesApi =>
-  override def setMapping(index: String, _type: String, mapping: String): Boolean =
-    apply().execute(new PutMapping.Builder(index, _type, mapping).build()).isSucceeded
+  override def setMapping(index: String, indexType: String, mapping: String): Boolean =
+    apply().execute(new PutMapping.Builder(index, indexType, mapping).build()).isSucceeded
 
-  override def getMapping(index: String, _type: String): String =
-    apply().execute(new GetMapping.Builder().addIndex(index).addType(_type).build()).getJsonString
+  override def getMapping(index: String, indexType: String): String =
+    apply()
+      .execute(new GetMapping.Builder().addIndex(index).addType(indexType).build())
+      .getJsonString
 }
 
 trait JestRefreshApi extends RefreshApi with JestClientCompanion {
@@ -112,27 +114,6 @@ trait JestFlushApi extends FlushApi with JestClientCompanion {
 }
 
 trait JestCountApi extends CountApi with JestClientCompanion {
-  override def countAsync(
-    jsonQuery: JSONQuery
-  )(implicit ec: ExecutionContext): Future[Option[Double]] = {
-    import JestClientResultHandler._
-    import jsonQuery._
-    val count = new Count.Builder().query(query)
-    for (indice <- indices) count.addIndex(indice)
-    for (t      <- types) count.addType(t)
-    val promise = Promise[Option[Double]]()
-    apply().executeAsyncPromise(count.build()) onComplete {
-      case Success(result) =>
-        if (!result.isSucceeded)
-          logger.error(result.getErrorMessage)
-        promise.success(Option(result.getCount))
-      case Failure(f) =>
-        logger.error(f.getMessage, f)
-        promise.failure(f)
-    }
-    promise.future
-  }
-
   override def count(jsonQuery: JSONQuery): Option[Double] = {
     import jsonQuery._
     val count = new Count.Builder().query(query)
@@ -246,10 +227,10 @@ trait JestSingleValueAggregateApi extends SingleValueAggregateApi with JestCount
 
 trait JestIndexApi extends IndexApi with JestClientCompanion {
   _: RefreshApi =>
-  override def index(index: String, _type: String, id: String, source: String): Boolean = {
+  override def index(index: String, indexType: String, id: String, source: String): Boolean = {
     Try(
       apply().execute(
-        new Index.Builder(source).index(index).`type`(_type).id(id).build()
+        new Index.Builder(source).index(index).`type`(indexType).id(id).build()
       )
     ) match {
       case Success(s) =>
@@ -262,29 +243,13 @@ trait JestIndexApi extends IndexApi with JestClientCompanion {
     }
   }
 
-  override def indexAsync(index: String, _type: String, id: String, source: String)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] = {
-    import JestClientResultHandler._
-    val promise: Promise[Boolean] = Promise()
-    apply().executeAsyncPromise(
-      new Index.Builder(source).index(index).`type`(_type).id(id).build()
-    ) onComplete {
-      case Success(s) => promise.success(s.isSucceeded && this.refresh(index))
-      case Failure(f) =>
-        logger.error(f.getMessage, f)
-        promise.failure(f)
-    }
-    promise.future
-  }
-
 }
 
 trait JestUpdateApi extends UpdateApi with JestClientCompanion {
   _: RefreshApi =>
   override def update(
     index: String,
-    _type: String,
+    indexType: String,
     id: String,
     source: String,
     upsert: Boolean
@@ -296,7 +261,7 @@ trait JestUpdateApi extends UpdateApi with JestClientCompanion {
             docAsUpsert(source)
           else
             source
-        ).index(index).`type`(_type).id(id).build()
+        ).index(index).`type`(indexType).id(id).build()
       )
     ) match {
       case Success(s) =>
@@ -309,65 +274,18 @@ trait JestUpdateApi extends UpdateApi with JestClientCompanion {
     }
   }
 
-  override def updateAsync(
-    index: String,
-    _type: String,
-    id: String,
-    source: String,
-    upsert: Boolean
-  )(implicit ec: ExecutionContext): Future[Boolean] = {
-    import JestClientResultHandler._
-    val promise: Promise[Boolean] = Promise()
-    apply().executeAsyncPromise(
-      new Update.Builder(
-        if (upsert)
-          docAsUpsert(source)
-        else
-          source
-      ).index(index).`type`(_type).id(id).build()
-    ) onComplete {
-      case Success(s) =>
-        if (!s.isSucceeded)
-          logger.error(s.getErrorMessage)
-        promise.success(s.isSucceeded && this.refresh(index))
-      case Failure(f) =>
-        logger.error(f.getMessage, f)
-        promise.failure(f)
-    }
-    promise.future
-  }
-
 }
 
 trait JestDeleteApi extends DeleteApi with JestClientCompanion {
   _: RefreshApi =>
-  override def delete(uuid: String, index: String, _type: String): Boolean = {
+  override def delete(uuid: String, index: String, indexType: String): Boolean = {
     val result = apply().execute(
-      new Delete.Builder(uuid).index(index).`type`(_type).build()
+      new Delete.Builder(uuid).index(index).`type`(indexType).build()
     )
     if (!result.isSucceeded) {
       logger.error(result.getErrorMessage)
     }
     result.isSucceeded && this.refresh(index)
-  }
-
-  override def deleteAsync(uuid: String, index: String, _type: String)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] = {
-    import JestClientResultHandler._
-    val promise: Promise[Boolean] = Promise()
-    apply().executeAsyncPromise(
-      new Delete.Builder(uuid).index(index).`type`(_type).build()
-    ) onComplete {
-      case Success(s) =>
-        if (!s.isSucceeded)
-          logger.error(s.getErrorMessage)
-        promise.success(s.isSucceeded && this.refresh(index))
-      case Failure(f) =>
-        logger.error(f.getMessage, f)
-        promise.failure(f)
-    }
-    promise.future
   }
 
 }
@@ -396,37 +314,6 @@ trait JestGetApi extends GetApi with JestClientCompanion {
       logger.error(result.getErrorMessage)
       None
     }
-  }
-
-  override def getAsync[U <: Timestamped](
-    id: String,
-    index: Option[String] = None,
-    maybeType: Option[String] = None
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]] = {
-    import JestClientResultHandler._
-    val promise: Promise[Option[U]] = Promise()
-    apply().executeAsyncPromise(
-      new Get.Builder(
-        index.getOrElse(
-          maybeType.getOrElse(
-            m.runtimeClass.getSimpleName.toLowerCase
-          )
-        ),
-        id
-      ).build()
-    ) onComplete {
-      case Success(result) =>
-        if (result.isSucceeded)
-          promise.success(Some(serialization.read[U](result.getSourceAsString)))
-        else {
-          logger.error(result.getErrorMessage)
-          promise.success(None)
-        }
-      case Failure(f) =>
-        logger.error(f.getMessage, f)
-        promise.failure(f)
-    }
-    promise.future
   }
 
 }
@@ -485,57 +372,6 @@ trait JestSearchApi extends SearchApi with JestClientCompanion {
     }
   }
 
-  override def searchAsync[U](
-    sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] = {
-    val promise = Promise[List[U]]()
-    val search: Option[Search] = sqlQuery.jestSearch
-    search match {
-      case Some(s) =>
-        import JestClientResultHandler._
-        apply().executeAsyncPromise(s) onComplete {
-          case Success(searchResult) =>
-            promise.success(
-              searchResult.getSourceAsStringList.asScala
-                .map(source => serialization.read[U](source))
-                .toList
-            )
-          case Failure(f) =>
-            promise.failure(f)
-        }
-      case _ => promise.success(List.empty)
-    }
-    promise.future
-  }
-
-  override def searchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[(U, List[I])] = {
-    val search: Option[Search] = sqlQuery.jestSearch
-    (search match {
-      case Some(s) =>
-        val result = apply().execute(s)
-        if (result.isSucceeded) {
-          Some(result)
-        } else {
-          logger.error(result.getErrorMessage)
-          None
-        }
-      case _ => None
-    }) match {
-      case Some(searchResult) =>
-        Try(searchResult.getJsonObject ~> [U, I] innerField) match {
-          case Success(s) => s
-          case Failure(f) =>
-            logger.error(f.getMessage, f)
-            List.empty
-        }
-      case _ => List.empty
-    }
-  }
-
   override def searchWithInnerHits[U, I](jsonQuery: JSONQuery, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
@@ -560,24 +396,6 @@ trait JestSearchApi extends SearchApi with JestClientCompanion {
   }
 
   override def multiSearch[U](
-    sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], formats: Formats): List[List[U]] = {
-    sqlQuery.jestMultiSearch.map(
-      apply().execute(_)
-    ) match {
-      case Some(multiSearchResult) =>
-        multiSearchResult.getResponses.asScala
-          .map(searchResponse =>
-            searchResponse.searchResult.getSourceAsStringList.asScala
-              .map(source => serialization.read[U](source))
-              .toList
-          )
-          .toList
-      case _ => List.empty
-    }
-  }
-
-  override def multiSearch[U](
     jsonQueries: JSONQueries
   )(implicit m: Manifest[U], formats: Formats): List[List[U]] = {
     val searches: List[Search] = jsonQueries.queries.map(_.search)
@@ -591,31 +409,12 @@ trait JestSearchApi extends SearchApi with JestClientCompanion {
       .toList
   }
 
-  override def multiSearchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[List[(U, List[I])]] = {
-    sqlQuery.jestMultiSearch
-      .map(nativeMultiSearchWithInnerHits(_, innerField))
-      .getOrElse(List.empty)
-  }
-
   override def multiSearchWithInnerHits[U, I](jsonQueries: JSONQueries, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
     formats: Formats
   ): List[List[(U, List[I])]] = {
-    nativeMultiSearchWithInnerHits(
-      new MultiSearch.Builder(jsonQueries.queries.map(_.search).asJava).build(),
-      innerField
-    )
-  }
-
-  private[this] def nativeMultiSearchWithInnerHits[U, I](
-    multiSearch: MultiSearch,
-    innerField: String
-  )(implicit m1: Manifest[U], m2: Manifest[I], formats: Formats): List[List[(U, List[I])]] = {
+    val multiSearch = new MultiSearch.Builder(jsonQueries.queries.map(_.search).asJava).build()
     val multiSearchResult = apply().execute(multiSearch)
     if (multiSearchResult.isSucceeded) {
       multiSearchResult.getResponses.asScala

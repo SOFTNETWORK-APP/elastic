@@ -148,7 +148,7 @@ trait RestHighLevelClientSettingsApi extends SettingsApi with RestHighLevelClien
 }
 
 trait RestHighLevelClientMappingApi extends MappingApi with RestHighLevelClientCompanion {
-  override def setMapping(index: String, `type`: String, mapping: String): Boolean = {
+  override def setMapping(index: String, indexType: String, mapping: String): Boolean = {
     apply()
       .indices()
       .putMapping(
@@ -159,7 +159,7 @@ trait RestHighLevelClientMappingApi extends MappingApi with RestHighLevelClientC
       .isAcknowledged
   }
 
-  override def getMapping(index: String, `type`: String): String = {
+  override def getMapping(index: String, indexType: String): String = {
     apply()
       .indices()
       .getMapping(
@@ -196,23 +196,6 @@ trait RestHighLevelClientFlushApi extends FlushApi with RestHighLevelClientCompa
 }
 
 trait RestHighLevelClientCountApi extends CountApi with RestHighLevelClientCompanion {
-  override def countAsync(
-    query: client.JSONQuery
-  )(implicit ec: ExecutionContext): Future[Option[Double]] = {
-    val promise = Promise[Option[Double]]()
-    apply().countAsync(
-      new CountRequest().indices(query.indices: _*).types(query.types: _*),
-      RequestOptions.DEFAULT,
-      new ActionListener[CountResponse] {
-        override def onResponse(response: CountResponse): Unit =
-          promise.success(Option(response.getCount.toDouble))
-
-        override def onFailure(e: Exception): Unit = promise.failure(e)
-      }
-    )
-    promise.future
-  }
-
   override def count(query: client.JSONQuery): Option[Double] = {
     Option(
       apply()
@@ -351,23 +334,6 @@ trait RestHighLevelClientIndexApi extends IndexApi with RestHighLevelClientCompa
       .getStatus < 400
   }
 
-  override def indexAsync(index: String, _type: String, id: String, source: String)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] = {
-    val promise: Promise[Boolean] = Promise()
-    apply().indexAsync(
-      new IndexRequest(index, _type, id)
-        .source(source, XContentType.JSON),
-      RequestOptions.DEFAULT,
-      new ActionListener[IndexResponse] {
-        override def onResponse(response: IndexResponse): Unit =
-          promise.success(response.status().getStatus < 400)
-
-        override def onFailure(e: Exception): Unit = promise.failure(e)
-      }
-    )
-    promise.future
-  }
 }
 
 trait RestHighLevelClientUpdateApi extends UpdateApi with RestHighLevelClientCompanion {
@@ -390,28 +356,6 @@ trait RestHighLevelClientUpdateApi extends UpdateApi with RestHighLevelClientCom
       .getStatus < 400
   }
 
-  override def updateAsync(
-    index: String,
-    _type: String,
-    id: String,
-    source: String,
-    upsert: Boolean
-  )(implicit ec: ExecutionContext): Future[Boolean] = {
-    val promise: Promise[Boolean] = Promise()
-    apply().updateAsync(
-      new UpdateRequest(index, _type, id)
-        .doc(source, XContentType.JSON)
-        .docAsUpsert(upsert),
-      RequestOptions.DEFAULT,
-      new ActionListener[UpdateResponse] {
-        override def onResponse(response: UpdateResponse): Unit =
-          promise.success(response.status().getStatus < 400)
-
-        override def onFailure(e: Exception): Unit = promise.failure(e)
-      }
-    )
-    promise.future
-  }
 }
 
 trait RestHighLevelClientDeleteApi extends DeleteApi with RestHighLevelClientCompanion {
@@ -427,22 +371,6 @@ trait RestHighLevelClientDeleteApi extends DeleteApi with RestHighLevelClientCom
       .getStatus < 400
   }
 
-  override def deleteAsync(uuid: String, index: String, _type: String)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] = {
-    val promise: Promise[Boolean] = Promise()
-    apply().deleteAsync(
-      new DeleteRequest(index, _type, uuid),
-      RequestOptions.DEFAULT,
-      new ActionListener[DeleteResponse] {
-        override def onResponse(response: DeleteResponse): Unit =
-          promise.success(response.status().getStatus < 400)
-
-        override def onFailure(e: Exception): Unit = promise.failure(e)
-      }
-    )
-    promise.future
-  }
 }
 
 trait RestHighLevelClientGetApi extends GetApi with RestHighLevelClientCompanion {
@@ -496,37 +424,6 @@ trait RestHighLevelClientGetApi extends GetApi with RestHighLevelClientCompanion
     }
   }
 
-  override def getAsync[U <: Timestamped](
-    id: String,
-    index: Option[String] = None,
-    maybeType: Option[String] = None
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]] = {
-    val promise = Promise[Option[U]]()
-    apply().getAsync(
-      new GetRequest(
-        index.getOrElse(
-          maybeType.getOrElse(
-            m.runtimeClass.getSimpleName.toLowerCase
-          )
-        ),
-        maybeType.getOrElse("_all"),
-        id
-      ),
-      RequestOptions.DEFAULT,
-      new ActionListener[GetResponse] {
-        override def onResponse(response: GetResponse): Unit = {
-          if (response.isExists) {
-            promise.success(Some(serialization.read[U](response.getSourceAsString)))
-          } else {
-            promise.success(None)
-          }
-        }
-
-        override def onFailure(e: Exception): Unit = promise.failure(e)
-      }
-    )
-    promise.future
-  }
 }
 
 trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCompanion {
@@ -573,73 +470,6 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
     }
   }
 
-  override def searchAsync[U](
-    sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] = {
-    val promise = Promise[List[U]]()
-    sqlQuery.search match {
-      case Some(searchRequest) =>
-        val indices = collection.immutable.Seq(searchRequest.sources: _*)
-        val jsonQuery = JSONQuery(searchRequest.query, indices)
-        import jsonQuery._
-        logger.info(s"Searching with query: $query on indices: ${indices.mkString(", ")}")
-        // Create a parser for the query
-        val xContentParser = XContentType.JSON
-          .xContent()
-          .createParser(
-            namedXContentRegistry,
-            DeprecationHandler.THROW_UNSUPPORTED_OPERATION,
-            query
-          )
-        // Execute the search asynchronously
-        apply().searchAsync(
-          new SearchRequest(indices: _*)
-            .types(types: _*)
-            .source(
-              SearchSourceBuilder.fromXContent(xContentParser)
-            ),
-          RequestOptions.DEFAULT,
-          new ActionListener[SearchResponse] {
-            override def onResponse(response: SearchResponse): Unit = {
-              if (response.getHits.getTotalHits > 0) {
-                promise.success(response.getHits.getHits.toList.map { hit =>
-                  serialization.read[U](hit.getSourceAsString)
-                })
-              } else {
-                promise.success(List.empty[U])
-              }
-            }
-
-            override def onFailure(e: Exception): Unit = promise.failure(e)
-          }
-        )
-      case None =>
-        promise.failure(
-          new IllegalArgumentException(
-            s"SQL query ${sqlQuery.query} does not contain a valid search request"
-          )
-        )
-    }
-    promise.future
-  }
-
-  override def searchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[(U, List[I])] = {
-    sqlQuery.search match {
-      case Some(searchRequest) =>
-        val indices = collection.immutable.Seq(searchRequest.sources: _*)
-        val jsonQuery = JSONQuery(searchRequest.query, indices)
-        searchWithInnerHits(jsonQuery, innerField)
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
-    }
-  }
-
   override def searchWithInnerHits[U, I](jsonQuery: JSONQuery, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
@@ -667,26 +497,6 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
       case Failure(f) =>
         logger.error(f.getMessage, f)
         List.empty
-    }
-  }
-
-  override def multiSearch[U](
-    sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], formats: Formats): List[List[U]] = {
-    sqlQuery.multiSearch match {
-      case Some(multiSearchRequest) =>
-        val jsonQueries: JSONQueries = JSONQueries(
-          collection.immutable
-            .Seq(multiSearchRequest.requests.map { searchRequest =>
-              JSONQuery(searchRequest.query, collection.immutable.Seq(searchRequest.sources: _*))
-            }: _*)
-            .toList
-        )
-        multiSearch[U](jsonQueries)
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
     }
   }
 
@@ -720,28 +530,6 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
           serialization.read[U](hit.getSourceAsString)
         }
       }
-    }
-  }
-
-  override def multiSearchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[List[(U, List[I])]] = {
-    sqlQuery.multiSearch match {
-      case Some(multiSearchRequest) =>
-        val jsonQueries: JSONQueries = JSONQueries(
-          collection.immutable
-            .Seq(multiSearchRequest.requests.map { searchRequest =>
-              JSONQuery(searchRequest.query, collection.immutable.Seq(searchRequest.sources: _*))
-            }: _*)
-            .toList
-        )
-        multiSearchWithInnerHits[U, I](jsonQueries, innerField)
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
     }
   }
 
