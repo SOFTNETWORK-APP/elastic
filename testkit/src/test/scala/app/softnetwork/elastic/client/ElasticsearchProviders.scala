@@ -16,7 +16,7 @@ object ElasticsearchProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val restHighLevelClient: RestHighLevelClient = apply()
+    implicit lazy val restHighLevelClient: ElasticsearchClient = apply()
   }
 
   class SampleProvider(es: Config)
@@ -26,7 +26,7 @@ object ElasticsearchProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val restHighLevelClient: RestHighLevelClient = apply()
+    implicit lazy val restHighLevelClient: ElasticsearchClient = apply()
   }
 
   class BinaryProvider(es: Config)
@@ -36,6 +36,6 @@ object ElasticsearchProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val restHighLevelClient: RestHighLevelClient = apply()
+    implicit lazy val restHighLevelClient: ElasticsearchClient = apply()
   }
 }

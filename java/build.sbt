@@ -12,8 +12,8 @@ val jacksonExclusions = Seq(
 
 val rest = Seq(
   "org.elasticsearch" % "elasticsearch" % Versions.elasticSearch exclude ("org.apache.logging.log4j", "log4j-api"),
-  "co.elastic.clients" % "elasticsearch-java" % Versions.rest exclude ("org.elasticsearch", "elasticsearch"),
-  "org.elasticsearch.client" % "elasticsearch-rest-client" % Versions.rest
+  "co.elastic.clients" % "elasticsearch-java" % Versions.elasticSearch exclude ("org.elasticsearch", "elasticsearch"),
+  "org.elasticsearch.client" % "elasticsearch-rest-client" % Versions.elasticSearch
 ).map(_.excludeAll(jacksonExclusions: _*))
 
 libraryDependencies ++= rest
