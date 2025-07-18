@@ -21,13 +21,13 @@ trait ElasticDockerTestKit extends ElasticTestKit { _: Suite =>
         .parse(s"docker.elastic.co/elasticsearch/elasticsearch")
         .withTag(elasticVersion)
     )
-    container.addEnv("ES_TMPDIR", "/tmp")
+    container.addEnv("ES_TMPDIR", "/usr/share/elasticsearch/tmp")
     container.addEnv("discovery.type", "single-node")
     container.addEnv("xpack.security.enabled", "false")
     container.addEnv("xpack.ml.enabled", "false")
     container.addEnv("xpack.watcher.enabled", "false")
     container.addEnv("xpack.graph.enabled", "false")
-    container.addFileSystemBind(tmpDir.toAbsolutePath.toString, "/tmp", BindMode.READ_WRITE)
+    container.addFileSystemBind(tmpDir.toAbsolutePath.toString, "/usr/share/elasticsearch/tmp", BindMode.READ_WRITE)
     container
   }
 
