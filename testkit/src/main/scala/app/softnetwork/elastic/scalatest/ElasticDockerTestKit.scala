@@ -2,6 +2,7 @@ package app.softnetwork.elastic.scalatest
 
 import org.scalatest.Suite
 import org.testcontainers.containers.BindMode
+import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.elasticsearch.ElasticsearchContainer
 import org.testcontainers.utility.DockerImageName
 
@@ -33,6 +34,8 @@ trait ElasticDockerTestKit extends ElasticTestKit { _: Suite =>
       "/usr/share/elasticsearch/tmp",
       BindMode.READ_WRITE
     )
+    container.addEnv("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
+    container.setWaitStrategy(Wait.forHttp("/").forStatusCode(200))
     container.withStartupTimeout(Duration.ofMinutes(3))
   }
 
