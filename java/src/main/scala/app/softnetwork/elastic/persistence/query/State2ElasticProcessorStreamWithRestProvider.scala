@@ -1,10 +1,10 @@
 package app.softnetwork.elastic.persistence.query
 
-import app.softnetwork.elastic.client.rest.RestHighLevelClientProvider
+import app.softnetwork.elastic.client.java.ElasticsearchClientProvider
 import app.softnetwork.persistence.message.CrudEvent
 import app.softnetwork.persistence.model.Timestamped
 import app.softnetwork.persistence.query.{JournalProvider, OffsetProvider}
 
 trait State2ElasticProcessorStreamWithRestProvider[T <: Timestamped, E <: CrudEvent]
     extends State2ElasticProcessorStream[T, E]
-    with RestHighLevelClientProvider[T] { _: JournalProvider with OffsetProvider => }
+    with ElasticsearchClientProvider[T] { _: JournalProvider with OffsetProvider => }

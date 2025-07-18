@@ -1,6 +1,6 @@
 package app.softnetwork.elastic.client
 
-import app.softnetwork.elastic.client.RestHighLevelProviders.{
+import app.softnetwork.elastic.client.ElasticsearchProviders.{
   BinaryProvider,
   PersonProvider,
   SampleProvider
@@ -9,7 +9,7 @@ import app.softnetwork.elastic.model.{Binary, Sample}
 import app.softnetwork.elastic.persistence.query.ElasticProvider
 import app.softnetwork.persistence.person.model.Person
 
-class RestHighLevelClientSpec extends ElasticClientSpec {
+class ElasticsearchClientSpec extends ElasticClientSpec {
 
   lazy val pClient: ElasticProvider[Person] with ElasticClientApi = new PersonProvider(
     elasticConfig

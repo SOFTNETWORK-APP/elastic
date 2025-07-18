@@ -1,30 +1,26 @@
-package app.softnetwork.elastic.client.rest
+package app.softnetwork.elastic.client.java
 
 import app.softnetwork.elastic.client.ElasticConfig
+import co.elastic.clients.elasticsearch.ElasticsearchClient
+import co.elastic.clients.json.jackson.JacksonJsonpMapper
+import co.elastic.clients.transport.rest_client.RestClientTransport
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.typesafe.scalalogging.StrictLogging
 import org.apache.http.HttpHost
 import org.apache.http.auth.{AuthScope, UsernamePasswordCredentials}
 import org.apache.http.impl.client.BasicCredentialsProvider
 import org.apache.http.impl.nio.client.HttpAsyncClientBuilder
-import org.elasticsearch.client.{RestClient, RestClientBuilder, RestHighLevelClient}
-import org.elasticsearch.common.settings.Settings
-import org.elasticsearch.xcontent.NamedXContentRegistry
-import org.elasticsearch.plugins.SearchPlugin
-import org.elasticsearch.search.SearchModule
+import org.elasticsearch.client.{RestClient, RestClientBuilder}
 
-trait RestHighLevelClientCompanion extends StrictLogging {
+trait ElasticsearchClientCompanion extends StrictLogging {
 
   def elasticConfig: ElasticConfig
 
-  private var client: Option[RestHighLevelClient] = None
+  private var client: Option[ElasticsearchClient] = None
 
-  lazy val namedXContentRegistry: NamedXContentRegistry = {
-    import scala.collection.JavaConverters._
-    val searchModule = new SearchModule(Settings.EMPTY, false, List.empty[SearchPlugin].asJava)
-    new NamedXContentRegistry(searchModule.getNamedXContents)
-  }
+  lazy val mapper = new ObjectMapper()
 
-  def apply(): RestHighLevelClient = {
+  def apply(): ElasticsearchClient = {
     client match {
       case Some(c) => c
       case _ =>
@@ -45,7 +41,8 @@ trait RestHighLevelClientCompanion extends StrictLogging {
           .setHttpClientConfigCallback((httpAsyncClientBuilder: HttpAsyncClientBuilder) =>
             httpAsyncClientBuilder.setDefaultCredentialsProvider(credentialsProvider)
           )
-        val c = new RestHighLevelClient(restClientBuilder)
+        val transport = new RestClientTransport(restClientBuilder.build(), new JacksonJsonpMapper())
+        val c = new ElasticsearchClient(transport)
         client = Some(c)
         c
     }

@@ -178,7 +178,7 @@ trait IndexApi { _: RefreshApi =>
 
   def indexAsync(index: String, id: String, source: String)(implicit
     ec: ExecutionContext
-  ): Future[Boolean]
+  ): Future[Boolean] = Future(this.index(index, id, source))
 }
 
 trait UpdateApi { _: RefreshApi =>
@@ -235,13 +235,11 @@ trait UpdateApi { _: RefreshApi =>
   )
   def updateAsync(index: String, indexType: String, id: String, source: String, upsert: Boolean)(
     implicit ec: ExecutionContext
-  ): Future[Boolean] = {
-    this.updateAsync(index, id, source, upsert)
-  }
+  ): Future[Boolean] = this.updateAsync(index, id, source, upsert)
 
   def updateAsync(index: String, id: String, source: String, upsert: Boolean)(implicit
     ec: ExecutionContext
-  ): Future[Boolean]
+  ): Future[Boolean] = Future(this.update(index, id, source, upsert))
 }
 
 trait DeleteApi { _: RefreshApi =>
@@ -279,7 +277,7 @@ trait DeleteApi { _: RefreshApi =>
 
   def deleteAsync(uuid: String, index: String)(implicit
     ec: ExecutionContext
-  ): Future[Boolean]
+  ): Future[Boolean] = Future(this.delete(uuid, index))
 
 }
 
@@ -330,9 +328,9 @@ trait BulkApi { _: RefreshApi with SettingsApi =>
     * |  balance |        |   bulk   |
     * |          |------->|          |
     * +----------+        +----------+
-    * |    |
-    * |    |
-    * |    |
+    *                        |    |
+    *                        |    |
+    *                        |    |
     * +---------+            |    |
     * |         |<-----------'    |
     * |  merge  |                 |
@@ -502,7 +500,11 @@ trait BulkApi { _: RefreshApi with SettingsApi =>
 }
 
 trait CountApi {
-  def countAsync(query: JSONQuery)(implicit ec: ExecutionContext): Future[Option[Double]]
+  def countAsync(query: JSONQuery)(implicit ec: ExecutionContext): Future[Option[Double]] = {
+    Future(
+      this.count(query)
+    )
+  }
 
   def count(query: JSONQuery): Option[Double]
 
@@ -527,7 +529,9 @@ trait GetApi {
     id: String,
     index: Option[String] = None,
     maybeType: Option[String] = None
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]]
+  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]] = {
+    Future(this.get[U](id, index, maybeType))
+  }
 }
 
 trait SearchApi {
@@ -538,13 +542,26 @@ trait SearchApi {
 
   def searchAsync[U](
     sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]]
+  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] = Future(
+    this.search[U](sqlQuery)
+  )
 
   def searchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
     formats: Formats
-  ): List[(U, List[I])]
+  ): List[(U, List[I])] = {
+    sqlQuery.search match {
+      case Some(searchRequest) =>
+        val indices = collection.immutable.Seq(searchRequest.sources: _*)
+        val jsonQuery = JSONQuery(searchRequest.query, indices)
+        searchWithInnerHits(jsonQuery, innerField)
+      case None =>
+        throw new IllegalArgumentException(
+          s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
 
   def searchWithInnerHits[U, I](jsonQuery: JSONQuery, innerField: String)(implicit
     m1: Manifest[U],
@@ -554,7 +571,23 @@ trait SearchApi {
 
   def multiSearch[U](
     sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], formats: Formats): List[List[U]]
+  )(implicit m: Manifest[U], formats: Formats): List[List[U]] = {
+    sqlQuery.multiSearch match {
+      case Some(multiSearchRequest) =>
+        val jsonQueries: JSONQueries = JSONQueries(
+          collection.immutable
+            .Seq(multiSearchRequest.requests.map { searchRequest =>
+              JSONQuery(searchRequest.query, collection.immutable.Seq(searchRequest.sources: _*))
+            }: _*)
+            .toList
+        )
+        multiSearch[U](jsonQueries)
+      case None =>
+        throw new IllegalArgumentException(
+          s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
 
   def multiSearch[U](
     jsonQueries: JSONQueries
@@ -564,7 +597,23 @@ trait SearchApi {
     m1: Manifest[U],
     m2: Manifest[I],
     formats: Formats
-  ): List[List[(U, List[I])]]
+  ): List[List[(U, List[I])]] = {
+    sqlQuery.multiSearch match {
+      case Some(multiSearchRequest) =>
+        val jsonQueries: JSONQueries = JSONQueries(
+          collection.immutable
+            .Seq(multiSearchRequest.requests.map { searchRequest =>
+              JSONQuery(searchRequest.query, collection.immutable.Seq(searchRequest.sources: _*))
+            }: _*)
+            .toList
+        )
+        multiSearchWithInnerHits[U, I](jsonQueries, innerField)
+      case None =>
+        throw new IllegalArgumentException(
+          s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
 
   def multiSearchWithInnerHits[U, I](jsonQueries: JSONQueries, innerField: String)(implicit
     m1: Manifest[U],

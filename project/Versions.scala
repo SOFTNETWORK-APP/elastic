@@ -2,13 +2,13 @@ object Versions {
 
 //  val akka = "2.6.20"
 
-  val scalatest = "3.2.16"
+  val scalatest = "3.2.19"
 
   val typesafeConfig = "1.4.2"
 
   val kxbmap = "0.4.4"
 
-  val jackson = "2.13.3" // 2.11.4 -> 2.12.7
+  val jackson = "2.19.0" // 2.13.3 -> 2.19.0
 
   val json4s = "4.0.6" // 3.6.12 -> 4.0.6
 
@@ -20,7 +20,7 @@ object Versions {
 
   val log4s = "1.8.2"
 
-  val elasticSearch = "8.18.2"
+  val elasticSearch = "8.18.3"
 
   val elastic4s = "8.18.2"
 
@@ -34,5 +34,5 @@ object Versions {
 
   val gson = "2.8.0"
 
-  val rest = "8.18.2" // rest high level client
+  val rest = "8.18.3" // java client
 }

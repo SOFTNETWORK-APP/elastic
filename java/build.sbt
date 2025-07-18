@@ -1,6 +1,6 @@
 organization := "app.softnetwork.elastic"
 
-name := "elastic-rest-client"
+name := "elastic-java-client"
 
 val jacksonExclusions = Seq(
   ExclusionRule(organization = "com.fasterxml.jackson.core"),

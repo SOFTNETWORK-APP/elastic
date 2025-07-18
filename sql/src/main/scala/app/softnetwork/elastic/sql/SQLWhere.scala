@@ -2,7 +2,6 @@ package app.softnetwork.elastic.sql
 
 import com.sksamuel.elastic4s.ElasticApi._
 import com.sksamuel.elastic4s.requests.searches.queries.Query
-import SQLImplicits._
 
 case object Where extends SQLExpr("where") with SQLRegex
 
@@ -376,7 +375,7 @@ case class SQLIn[R, +T <: SQLValue[R]](
   values: SQLValues[R, T],
   maybeNot: Option[Not.type] = None
 ) extends SQLCriteriaWithIdentifier
-    with ElasticFilter {
+    with ElasticFilter { this: SQLIn[R, T] =>
   override def sql =
     s"$identifier ${maybeNot.map(_ => "not ").getOrElse("")}$operator $values"
   override def operator: SQLOperator = In

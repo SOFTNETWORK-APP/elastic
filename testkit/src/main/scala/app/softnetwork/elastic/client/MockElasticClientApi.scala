@@ -4,7 +4,6 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Flow
 import app.softnetwork.elastic.sql.SQLQuery
-import app.softnetwork.persistence.message.CountResponse
 import org.json4s.Formats
 import app.softnetwork.persistence.model.Timestamped
 import org.slf4j.{Logger, LoggerFactory}
@@ -39,11 +38,6 @@ trait MockElasticClientApi extends ElasticClientApi {
 
   override def openIndex(index: String): Boolean = true
 
-  override def countAsync(jsonQuery: JSONQuery)(implicit
-    ec: ExecutionContext
-  ): Future[Option[Double]] =
-    throw new UnsupportedOperationException
-
   override def count(jsonQuery: JSONQuery): Option[Double] =
     throw new UnsupportedOperationException
 
@@ -54,20 +48,8 @@ trait MockElasticClientApi extends ElasticClientApi {
   )(implicit m: Manifest[U], formats: Formats): Option[U] =
     elasticDocuments.get(id).asInstanceOf[Option[U]]
 
-  override def getAsync[U <: Timestamped](
-    id: String,
-    index: Option[String] = None,
-    maybeType: Option[String] = None
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]] =
-    Future.successful(elasticDocuments.get(id).asInstanceOf[Option[U]])
-
   override def search[U](sqlQuery: SQLQuery)(implicit m: Manifest[U], formats: Formats): List[U] =
     elasticDocuments.getAll.toList.asInstanceOf[List[U]]
-
-  override def searchAsync[U](
-    sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] =
-    Future.successful(search(sqlQuery))
 
   override def multiSearch[U](
     sqlQuery: SQLQuery
@@ -88,21 +70,7 @@ trait MockElasticClientApi extends ElasticClientApi {
     true
   }
 
-  override def indexAsync[U <: Timestamped](
-    entity: U,
-    index: Option[String] = None,
-    maybeType: Option[String] = None
-  )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
-    elasticDocuments.createOrUpdate(entity)
-    Future.successful(true)
-  }
-
   override def index(index: String, id: String, source: String): Boolean =
-    throw new UnsupportedOperationException
-
-  override def indexAsync(index: String, id: String, source: String)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] =
     throw new UnsupportedOperationException
 
   override def update[U <: Timestamped](
@@ -115,16 +83,6 @@ trait MockElasticClientApi extends ElasticClientApi {
     true
   }
 
-  override def updateAsync[U <: Timestamped](
-    entity: U,
-    index: Option[String] = None,
-    maybeType: Option[String] = None,
-    upsert: Boolean = true
-  )(implicit u: ClassTag[U], ec: ExecutionContext, formats: Formats): Future[Boolean] = {
-    elasticDocuments.createOrUpdate(entity)
-    Future.successful(true)
-  }
-
   override def update(
     index: String,
     id: String,
@@ -135,13 +93,6 @@ trait MockElasticClientApi extends ElasticClientApi {
     false
   }
 
-  override def updateAsync(
-    index: String,
-    id: String,
-    source: String,
-    upsert: Boolean
-  )(implicit ec: ExecutionContext): Future[Boolean] = Future.successful(false)
-
   override def delete(uuid: String, index: String): Boolean = {
     if (elasticDocuments.get(uuid).isDefined) {
       elasticDocuments.delete(uuid)
@@ -149,12 +100,6 @@ trait MockElasticClientApi extends ElasticClientApi {
     } else {
       false
     }
-  }
-
-  override def deleteAsync(uuid: String, index: String)(implicit
-    ec: ExecutionContext
-  ): Future[Boolean] = {
-    Future.successful(delete(uuid, index))
   }
 
   override def refresh(index: String): Boolean = true

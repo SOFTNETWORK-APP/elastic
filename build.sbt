@@ -8,7 +8,7 @@ ThisBuild / organization := "app.softnetwork"
 
 name := "elastic"
 
-ThisBuild / version := "7.17.29"
+ThisBuild / version := Versions.elasticSearch
 
 ThisBuild / scalaVersion := "2.12.18"
 
@@ -66,7 +66,7 @@ lazy val persistence = project.in(file("persistence"))
     client % "compile->compile;test->test;it->it"
   )
 
-lazy val rest = project.in(file("rest"))
+lazy val java = project.in(file("java"))
   .configs(IntegrationTest)
   .settings(Defaults.itSettings)
   .dependsOn(
@@ -75,12 +75,16 @@ lazy val rest = project.in(file("rest"))
 
 lazy val testKit = project.in(file("testkit"))
   .configs(IntegrationTest)
-  .settings(Defaults.itSettings)
+  .settings(
+    Defaults.itSettings,
+    app.softnetwork.Info.infoSettings
+  )
+  .enablePlugins(BuildInfoPlugin)
   .dependsOn(
-    rest % "compile->compile;test->test;it->it"
+    java % "compile->compile;test->test;it->it"
   )
 
 lazy val root = project.in(file("."))
   .configs(IntegrationTest)
   .settings(Defaults.itSettings, Publish.noPublishSettings)
-  .aggregate(sql, client, persistence, rest, testKit)
+  .aggregate(sql, client, persistence, java, testKit)

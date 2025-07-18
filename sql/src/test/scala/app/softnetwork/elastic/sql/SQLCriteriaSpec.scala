@@ -18,7 +18,7 @@ class SQLCriteriaSpec extends AnyFlatSpec with Matchers {
     val criteria: Option[SQLCriteria] = sql
     val result = SearchBodyBuilderFn(
       SearchRequest("*") query criteria.map(_.asQuery()).getOrElse(matchAllQuery())
-    ).string()
+    ).string
     println(result)
     result
   }

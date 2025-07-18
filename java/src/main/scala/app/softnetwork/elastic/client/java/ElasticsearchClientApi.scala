@@ -1,0 +1,691 @@
+package app.softnetwork.elastic.client.java
+
+import akka.NotUsed
+import akka.actor.ActorSystem
+import akka.stream.scaladsl.Flow
+import app.softnetwork.elastic.client._
+import app.softnetwork.elastic.sql.SQLQuery
+import app.softnetwork.elastic.{client, sql}
+import app.softnetwork.persistence.model.Timestamped
+import app.softnetwork.serialization.serialization
+import co.elastic.clients.elasticsearch.core.bulk.{
+  BulkOperation,
+  BulkResponseItem,
+  DeleteOperation,
+  IndexOperation,
+  UpdateAction,
+  UpdateOperation
+}
+import co.elastic.clients.elasticsearch.core.msearch.{
+  MultisearchBody,
+  MultisearchHeader,
+  RequestItem
+}
+import co.elastic.clients.elasticsearch.core.{
+  BulkRequest,
+  BulkResponse,
+  CountRequest,
+  DeleteRequest,
+  GetRequest,
+  IndexRequest,
+  MsearchRequest,
+  SearchRequest,
+  UpdateRequest
+}
+import co.elastic.clients.elasticsearch.indices.update_aliases.{Action, AddAction, RemoveAction}
+import co.elastic.clients.elasticsearch.indices.{
+  CloseIndexRequest,
+  CreateIndexRequest,
+  DeleteIndexRequest,
+  FlushRequest,
+  GetIndicesSettingsRequest,
+  GetMappingRequest,
+  IndexSettings,
+  OpenRequest,
+  PutIndicesSettingsRequest,
+  PutMappingRequest,
+  RefreshRequest,
+  UpdateAliasesRequest
+}
+import com.google.gson.JsonParser
+
+import _root_.java.io.StringReader
+import _root_.java.util.{Map => JMap}
+
+import scala.collection.JavaConverters.{collectionAsScalaIterableConverter, seqAsJavaListConverter}
+import org.json4s.Formats
+
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.language.implicitConversions
+import scala.util.{Failure, Success, Try}
+
+trait ElasticsearchClientApi
+    extends ElasticClientApi
+    with ElasticsearchClientIndicesApi
+    with ElasticsearchClientAliasApi
+    with ElasticsearchClientSettingsApi
+    with ElasticsearchClientMappingApi
+    with ElasticsearchClientRefreshApi
+    with ElasticsearchClientFlushApi
+    with ElasticsearchClientCountApi
+    with ElasticsearchClientSingleValueAggregateApi
+    with ElasticsearchClientIndexApi
+    with ElasticsearchClientUpdateApi
+    with ElasticsearchClientDeleteApi
+    with ElasticsearchClientGetApi
+    with ElasticsearchClientSearchApi
+    with ElasticsearchClientBulkApi
+
+trait ElasticsearchClientIndicesApi extends IndicesApi with ElasticsearchClientCompanion {
+  override def createIndex(index: String, settings: String): Boolean = {
+    apply()
+      .indices()
+      .create(
+        new CreateIndexRequest.Builder()
+          .index(index)
+          .settings(new IndexSettings.Builder().withJson(new StringReader(settings)).build())
+          .build()
+      )
+      .acknowledged()
+  }
+
+  override def deleteIndex(index: String): Boolean = {
+    apply().indices().delete(new DeleteIndexRequest.Builder().index(index).build()).acknowledged()
+  }
+
+  override def openIndex(index: String): Boolean = {
+    apply().indices().open(new OpenRequest.Builder().index(index).build()).acknowledged()
+  }
+
+  override def closeIndex(index: String): Boolean = {
+    apply().indices().close(new CloseIndexRequest.Builder().index(index).build()).acknowledged()
+  }
+
+}
+
+trait ElasticsearchClientAliasApi extends AliasApi with ElasticsearchClientCompanion {
+  override def addAlias(index: String, alias: String): Boolean = {
+    apply()
+      .indices()
+      .updateAliases(
+        new UpdateAliasesRequest.Builder()
+          .actions(
+            new Action.Builder()
+              .add(new AddAction.Builder().index(index).alias(alias).build())
+              .build()
+          )
+          .build()
+      )
+      .acknowledged()
+  }
+
+  override def removeAlias(index: String, alias: String): Boolean = {
+    apply()
+      .indices()
+      .updateAliases(
+        new UpdateAliasesRequest.Builder()
+          .actions(
+            new Action.Builder()
+              .remove(new RemoveAction.Builder().index(index).alias(alias).build())
+              .build()
+          )
+          .build()
+      )
+      .acknowledged()
+  }
+}
+
+trait ElasticsearchClientSettingsApi extends SettingsApi with ElasticsearchClientCompanion {
+  _: ElasticsearchClientIndicesApi =>
+
+  override def updateSettings(index: String, settings: String): Boolean = {
+    apply()
+      .indices()
+      .putSettings(
+        new PutIndicesSettingsRequest.Builder()
+          .index(index)
+          .settings(new IndexSettings.Builder().withJson(new StringReader(settings)).build())
+          .build()
+      )
+      .acknowledged()
+  }
+
+  override def loadSettings(): String = {
+    apply()
+      .indices()
+      .getSettings(
+        new GetIndicesSettingsRequest.Builder().index("*").build()
+      )
+      .toString
+  }
+}
+
+trait ElasticsearchClientMappingApi extends MappingApi with ElasticsearchClientCompanion {
+  override def setMapping(index: String, mapping: String): Boolean = {
+    apply()
+      .indices()
+      .putMapping(
+        new PutMappingRequest.Builder().index(index).withJson(new StringReader(mapping)).build()
+      )
+      .acknowledged()
+  }
+
+  override def getMapping(index: String): String = {
+    apply()
+      .indices()
+      .getMapping(
+        new GetMappingRequest.Builder().index(index).build()
+      )
+      .toString
+  }
+}
+
+trait ElasticsearchClientRefreshApi extends RefreshApi with ElasticsearchClientCompanion {
+  override def refresh(index: String): Boolean = {
+    apply()
+      .indices()
+      .refresh(
+        new RefreshRequest.Builder().index(index).build()
+      )
+      .shards()
+      .failed()
+      .intValue() == 0
+  }
+}
+
+trait ElasticsearchClientFlushApi extends FlushApi with ElasticsearchClientCompanion {
+  override def flush(index: String, force: Boolean = true, wait: Boolean = true): Boolean = {
+    apply()
+      .indices()
+      .flush(
+        new FlushRequest.Builder().index(index).force(force).waitIfOngoing(wait).build()
+      )
+      .shards()
+      .failed()
+      .intValue() == 0
+  }
+}
+
+trait ElasticsearchClientCountApi extends CountApi with ElasticsearchClientCompanion {
+  override def count(query: client.JSONQuery): Option[Double] = {
+    Option(
+      apply()
+        .count(
+          new CountRequest.Builder().index(query.indices.asJava).build()
+        )
+        .count()
+        .toDouble
+    )
+  }
+}
+
+trait ElasticsearchClientSingleValueAggregateApi
+    extends SingleValueAggregateApi
+    with ElasticsearchClientCountApi {
+  override def aggregate(
+    sqlQuery: SQLQuery
+  )(implicit ec: ExecutionContext): Future[Seq[SingleValueAggregateResult]] = {
+    val futures = for (aggregation <- sqlQuery.aggregations) yield {
+      val promise: Promise[SingleValueAggregateResult] = Promise()
+      val field = aggregation.field
+      val sourceField = aggregation.sourceField
+      val aggType = aggregation.aggType
+      val aggName = aggregation.aggName
+      val query = aggregation.query.getOrElse("")
+      val sources = aggregation.sources
+      sourceField match {
+        case "_id" if aggType.sql == "count" =>
+          countAsync(
+            JSONQuery(
+              query,
+              collection.immutable.Seq(sources: _*),
+              collection.immutable.Seq.empty[String]
+            )
+          ).onComplete {
+            case Success(result) =>
+              promise.success(
+                SingleValueAggregateResult(
+                  field,
+                  aggType,
+                  result.getOrElse(0d),
+                  None
+                )
+              )
+            case Failure(f) =>
+              logger.error(f.getMessage, f.fillInStackTrace())
+              promise.success(SingleValueAggregateResult(field, aggType, 0d, Some(f.getMessage)))
+          }
+          promise.future
+        case _ =>
+          val jsonQuery = JSONQuery(
+            query,
+            collection.immutable.Seq(sources: _*),
+            collection.immutable.Seq.empty[String]
+          )
+          import jsonQuery._
+          // Create a parser for the query
+          Try(
+            apply().search(
+              new SearchRequest.Builder()
+                .index(indices.asJava)
+                .withJson(
+                  new StringReader(jsonQuery.query)
+                )
+                .build()
+            )
+          ) match {
+            case Success(response) =>
+              val agg = aggName.split("\\.").last
+
+              val itAgg = aggName.split("\\.").iterator
+
+              var root =
+                if (aggregation.nested) {
+                  response.aggregations().get(itAgg.next()).nested().aggregations()
+                } else {
+                  response.aggregations()
+                }
+
+              if (aggregation.filtered) {
+                root = root.get(itAgg.next()).filter().aggregations()
+              }
+
+              promise.success(
+                SingleValueAggregateResult(
+                  field,
+                  aggType,
+                  aggType match {
+                    case sql.Count =>
+                      if (aggregation.distinct) {
+                        root.get(agg).cardinality().value()
+                      } else {
+                        root.get(agg).valueCount().value()
+                      }
+                    case sql.Sum =>
+                      root.get(agg).sum().value()
+                    case sql.Avg =>
+                      root.get(agg).avg().value()
+                    case sql.Min =>
+                      root.get(agg).min().value()
+                    case sql.Max =>
+                      root.get(agg).max().value()
+                    case _ => 0d
+                  },
+                  None
+                )
+              )
+            case Failure(exception) =>
+              logger.error(s"Failed to execute search for aggregation: $aggName", exception)
+              promise.success(
+                SingleValueAggregateResult(
+                  field,
+                  aggType,
+                  0d,
+                  Some(exception.getMessage)
+                )
+              )
+          }
+          promise.future
+      }
+    }
+    Future.sequence(futures)
+  }
+}
+
+trait ElasticsearchClientIndexApi extends IndexApi with ElasticsearchClientCompanion {
+  _: ElasticsearchClientRefreshApi =>
+  override def index(index: String, id: String, source: String): Boolean = {
+    apply()
+      .index(
+        new IndexRequest.Builder()
+          .index(index)
+          .id(id)
+          .withJson(new StringReader(source))
+          .build()
+      )
+      .shards()
+      .failed()
+      .intValue() == 0
+  }
+
+}
+
+trait ElasticsearchClientUpdateApi extends UpdateApi with ElasticsearchClientCompanion {
+  _: ElasticsearchClientRefreshApi =>
+  override def update(
+    index: String,
+    id: String,
+    source: String,
+    upsert: Boolean
+  ): Boolean = {
+    apply()
+      .update(
+        new UpdateRequest.Builder[JMap[String, Object], JMap[String, Object]]()
+          .index(index)
+          .id(id)
+          .doc(mapper.readValue(source, classOf[JMap[String, Object]]))
+          .docAsUpsert(upsert)
+          .build(),
+        classOf[JMap[String, Object]]
+      )
+      .shards()
+      .failed()
+      .intValue() == 0
+  }
+
+}
+
+trait ElasticsearchClientDeleteApi extends DeleteApi with ElasticsearchClientCompanion {
+  _: ElasticsearchClientRefreshApi =>
+
+  override def delete(uuid: String, index: String): Boolean = {
+    apply()
+      .delete(
+        new DeleteRequest.Builder().index(index).id(uuid).build()
+      )
+      .shards()
+      .failed()
+      .intValue() == 0
+  }
+
+}
+
+trait ElasticsearchClientGetApi extends GetApi with ElasticsearchClientCompanion {
+
+  def get[U <: Timestamped](
+    id: String,
+    index: Option[String] = None,
+    maybeType: Option[String] = None
+  )(implicit m: Manifest[U], formats: Formats): Option[U] = {
+    Try(
+      apply().get(
+        new GetRequest.Builder()
+          .index(
+            index.getOrElse(
+              maybeType.getOrElse(
+                m.runtimeClass.getSimpleName.toLowerCase
+              )
+            )
+          )
+          .id(id)
+          .build(),
+        classOf[JMap[String, Object]]
+      )
+    ) match {
+      case Success(response) =>
+        if (response.found()) {
+          val source = mapper.writeValueAsString(response.source())
+          logger.info(s"Deserializing response $source for id: $id, index: ${index
+            .getOrElse("default")}, type: ${maybeType.getOrElse("_all")}")
+          // Deserialize the source string to the expected type
+          // Note: This assumes that the source is a valid JSON representation of U
+          // and that the serialization library is capable of handling it.
+          Try(serialization.read[U](source)) match {
+            case Success(value) => Some(value)
+            case Failure(f) =>
+              logger.error(
+                s"Failed to deserialize response $source for id: $id, index: ${index
+                  .getOrElse("default")}, type: ${maybeType.getOrElse("_all")}",
+                f
+              )
+              None
+          }
+        } else {
+          None
+        }
+      case Failure(f) =>
+        logger.error(
+          s"Failed to get document with id: $id, index: ${index
+            .getOrElse("default")}, type: ${maybeType.getOrElse("_all")}",
+          f
+        )
+        None
+    }
+  }
+
+}
+
+trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCompanion {
+  override def search[U](
+    jsonQuery: JSONQuery
+  )(implicit m: Manifest[U], formats: Formats): List[U] = {
+    import jsonQuery._
+    logger.info(s"Searching with query: $query on indices: ${indices.mkString(", ")}")
+    val response = apply().search(
+      new SearchRequest.Builder()
+        .index(indices.asJava)
+        .withJson(
+          new StringReader(query)
+        )
+        .build(),
+      classOf[JMap[String, Object]]
+    )
+    if (response.hits().total().value() > 0) {
+      response
+        .hits()
+        .hits()
+        .asScala
+        .map { hit =>
+          val source = mapper.writeValueAsString(hit.source())
+          logger.info(s"Deserializing hit: $source")
+          serialization.read[U](source)
+        }
+        .toList
+    } else {
+      List.empty[U]
+    }
+  }
+
+  override def search[U](sqlQuery: SQLQuery)(implicit m: Manifest[U], formats: Formats): List[U] = {
+    sqlQuery.search match {
+      case Some(searchRequest) =>
+        val indices = collection.immutable.Seq(searchRequest.sources: _*)
+        search[U](JSONQuery(searchRequest.query, indices))
+      case None =>
+        throw new IllegalArgumentException(
+          s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
+
+  override def searchWithInnerHits[U, I](jsonQuery: JSONQuery, innerField: String)(implicit
+    m1: Manifest[U],
+    m2: Manifest[I],
+    formats: Formats
+  ): List[(U, List[I])] = {
+    import jsonQuery._
+    val response = apply().search(
+      new SearchRequest.Builder()
+        .index(indices.asJava)
+        .withJson(
+          new StringReader(query)
+        )
+        .build(),
+      classOf[JMap[String, Object]]
+    )
+    Try(new JsonParser().parse(response.toString).getAsJsonObject ~> [U, I] innerField) match {
+      case Success(s) => s
+      case Failure(f) =>
+        logger.error(f.getMessage, f)
+        List.empty
+    }
+  }
+
+  override def multiSearch[U](
+    jsonQueries: JSONQueries
+  )(implicit m: Manifest[U], formats: Formats): List[List[U]] = {
+    import jsonQueries._
+
+    val items = queries.map { query =>
+      new RequestItem.Builder()
+        .header(new MultisearchHeader.Builder().index(query.indices.asJava).build())
+        .body(new MultisearchBody.Builder().withJson(new StringReader(query.query)).build())
+        .build()
+    }
+
+    val request = new MsearchRequest.Builder().searches(items.asJava).build()
+    val responses = apply().msearch(request, classOf[JMap[String, Object]])
+
+    responses.responses().asScala.toList.map {
+      case response if response.isFailure =>
+        logger.error(s"Error in multi search: ${response.failure().error().reason()}")
+        List.empty[U]
+
+      case response =>
+        response
+          .result()
+          .hits()
+          .hits()
+          .asScala
+          .toList
+          .map(hit => serialization.read[U](mapper.writeValueAsString(hit.source())))
+    }
+  }
+
+  override def multiSearchWithInnerHits[U, I](jsonQueries: JSONQueries, innerField: String)(implicit
+    m1: Manifest[U],
+    m2: Manifest[I],
+    formats: Formats
+  ): List[List[(U, List[I])]] = {
+    import jsonQueries._
+    val items = queries.map { query =>
+      new RequestItem.Builder()
+        .header(new MultisearchHeader.Builder().index(query.indices.asJava).build())
+        .body(new MultisearchBody.Builder().withJson(new StringReader(query.query)).build())
+        .build()
+    }
+
+    val request = new MsearchRequest.Builder().searches(items.asJava).build()
+    val responses = apply().msearch(request, classOf[JMap[String, Object]])
+
+    responses.responses().asScala.toList.map {
+      case response if response.isFailure =>
+        logger.error(s"Error in multi search: ${response.failure().error().reason()}")
+        List.empty[(U, List[I])]
+
+      case response =>
+        Try(
+          new JsonParser().parse(response.result().toString).getAsJsonObject ~> [U, I] innerField
+        ) match {
+          case Success(s) => s
+          case Failure(f) =>
+            logger.error(f.getMessage, f)
+            List.empty
+        }
+    }
+  }
+
+}
+
+trait ElasticsearchClientBulkApi
+    extends ElasticsearchClientRefreshApi
+    with ElasticsearchClientSettingsApi
+    with ElasticsearchClientIndicesApi
+    with BulkApi {
+  override type A = BulkOperation
+  override type R = BulkResponse
+
+  override def toBulkAction(bulkItem: BulkItem): A = {
+    import bulkItem._
+
+    action match {
+      case BulkAction.UPDATE =>
+        new BulkOperation.Builder()
+          .update(
+            new UpdateOperation.Builder()
+              .index(index)
+              .id(id.orNull)
+              .action(
+                new UpdateAction.Builder[JMap[String, Object], JMap[String, Object]]()
+                  .doc(mapper.readValue(body, classOf[JMap[String, Object]]))
+                  .docAsUpsert(true)
+                  .build()
+              )
+              .build()
+          )
+          .build()
+
+      case BulkAction.DELETE =>
+        val deleteId = id.getOrElse {
+          throw new IllegalArgumentException(s"Missing id for delete on index $index")
+        }
+        new BulkOperation.Builder()
+          .delete(new DeleteOperation.Builder().index(index).id(deleteId).build())
+          .build()
+
+      case _ =>
+        new BulkOperation.Builder()
+          .index(
+            new IndexOperation.Builder[JMap[String, Object]]()
+              .index(index)
+              .id(id.orNull)
+              .document(mapper.readValue(body, classOf[JMap[String, Object]]))
+              .build()
+          )
+          .build()
+    }
+  }
+  override def bulkResult: Flow[R, Set[String], NotUsed] =
+    Flow[BulkResponse]
+      .named("result")
+      .map(result => {
+        val items = result.items().asScala.toList
+        val grouped = items.groupBy(_.index())
+        val indices = grouped.keys.toSet
+        for (index <- indices) {
+          logger
+            .info(s"Bulk operation succeeded for index $index with ${grouped(index).length} items.")
+        }
+        indices
+      })
+
+  override def bulk(implicit
+    bulkOptions: BulkOptions,
+    system: ActorSystem
+  ): Flow[Seq[A], R, NotUsed] = {
+    val parallelism = Math.max(1, bulkOptions.balance)
+    Flow[Seq[A]]
+      .named("bulk")
+      .mapAsyncUnordered[R](parallelism) { items =>
+        val request =
+          new BulkRequest.Builder().index(bulkOptions.index).operations(items.asJava).build()
+        Try(apply().bulk(request)) match {
+          case Success(response) if response.errors() =>
+            val failedItems = response.items().asScala.filter(_.status() >= 400)
+            if (failedItems.nonEmpty) {
+              val errorMessages =
+                failedItems.map(i => s"${i.id()} - ${i.error().reason()}").mkString(", ")
+              Future.failed(new Exception(s"Bulk operation failed for items: $errorMessages"))
+            } else {
+              Future.successful(response)
+            }
+          case Success(response) =>
+            Future.successful(response)
+          case Failure(exception) =>
+            logger.error("Bulk operation failed", exception)
+            Future.failed(exception)
+        }
+      }
+  }
+
+  private[this] def toBulkElasticResultItem(i: BulkResponseItem): BulkElasticResultItem =
+    new BulkElasticResultItem {
+      override def index: String = i.index()
+    }
+
+  override implicit def toBulkElasticAction(a: BulkOperation): BulkElasticAction =
+    new BulkElasticAction {
+      override def index: String =
+        if (a.isIndex) a.index().index()
+        else if (a.isDelete) a.delete().index()
+        else if (a.isUpdate) a.update().index()
+        else throw new IllegalArgumentException("Unsupported bulk action type")
+    }
+
+  override implicit def toBulkElasticResult(r: BulkResponse): BulkElasticResult = {
+    new BulkElasticResult {
+      override def items: List[BulkElasticResultItem] =
+        r.items().asScala.toList.map(toBulkElasticResultItem)
+    }
+  }
+}

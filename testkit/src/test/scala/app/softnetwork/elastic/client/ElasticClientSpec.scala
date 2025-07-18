@@ -1,8 +1,5 @@
 package app.softnetwork.elastic.client
 
-import java.io.ByteArrayInputStream
-import java.util.concurrent.TimeUnit
-import java.util.UUID
 import akka.actor.ActorSystem
 import app.softnetwork.elastic.sql.SQLQuery
 import com.fasterxml.jackson.core.JsonParseException
@@ -19,7 +16,10 @@ import com.typesafe.scalalogging.StrictLogging
 import org.json4s.Formats
 import org.slf4j.{Logger, LoggerFactory}
 
-import java.nio.file.{Files, Paths}
+import _root_.java.io.ByteArrayInputStream
+import _root_.java.util.concurrent.TimeUnit
+import _root_.java.util.UUID
+import _root_.java.nio.file.{Files, Paths}
 import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success}
