@@ -6,6 +6,7 @@ import org.testcontainers.elasticsearch.ElasticsearchContainer
 import org.testcontainers.utility.DockerImageName
 
 import java.nio.file.{Files, Path}
+import java.time.Duration
 
 /** Created by smanciot on 28/06/2018.
   */
@@ -27,8 +28,12 @@ trait ElasticDockerTestKit extends ElasticTestKit { _: Suite =>
     container.addEnv("xpack.ml.enabled", "false")
     container.addEnv("xpack.watcher.enabled", "false")
     container.addEnv("xpack.graph.enabled", "false")
-    container.addFileSystemBind(tmpDir.toAbsolutePath.toString, "/usr/share/elasticsearch/tmp", BindMode.READ_WRITE)
-    container
+    container.addFileSystemBind(
+      tmpDir.toAbsolutePath.toString,
+      "/usr/share/elasticsearch/tmp",
+      BindMode.READ_WRITE
+    )
+    container.withStartupTimeout(Duration.ofMinutes(3))
   }
 
   override def start(): Unit = elasticContainer.start()
