@@ -52,23 +52,9 @@ trait MockElasticClientApi extends ElasticClientApi {
     elasticDocuments.getAll.toList.asInstanceOf[List[U]]
 
   override def multiSearch[U](
-    sqlQuery: SQLQuery
-  )(implicit m: Manifest[U], formats: Formats): List[List[U]] =
-    throw new UnsupportedOperationException
-
-  override def multiSearch[U](
     jsonQueries: JSONQueries
   )(implicit m: Manifest[U], formats: Formats): List[List[U]] =
     throw new UnsupportedOperationException
-
-  override def index[U <: Timestamped](
-    entity: U,
-    index: Option[String] = None,
-    maybeType: Option[String] = None
-  )(implicit u: ClassTag[U], formats: Formats): Boolean = {
-    elasticDocuments.createOrUpdate(entity)
-    true
-  }
 
   override def index(index: String, id: String, source: String): Boolean =
     throw new UnsupportedOperationException
@@ -134,22 +120,10 @@ trait MockElasticClientApi extends ElasticClientApi {
     formats: Formats
   ): List[List[(U, List[I])]] = List.empty
 
-  override def multiSearchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[List[(U, List[I])]] = List.empty
-
   override def search[U](jsonQuery: JSONQuery)(implicit m: Manifest[U], formats: Formats): List[U] =
     List.empty
 
   override def searchWithInnerHits[U, I](jsonQuery: JSONQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[(U, List[I])] = List.empty
-
-  override def searchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
     m1: Manifest[U],
     m2: Manifest[I],
     formats: Formats

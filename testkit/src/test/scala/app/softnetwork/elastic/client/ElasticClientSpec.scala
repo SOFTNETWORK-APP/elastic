@@ -17,9 +17,10 @@ import org.json4s.Formats
 import org.slf4j.{Logger, LoggerFactory}
 
 import _root_.java.io.ByteArrayInputStream
+import _root_.java.nio.file.{Files, Paths}
 import _root_.java.util.concurrent.TimeUnit
 import _root_.java.util.UUID
-import _root_.java.nio.file.{Files, Paths}
+
 import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success}
@@ -173,19 +174,6 @@ trait ElasticClientSpec
         _.sourceField("name")
       ) should contain allOf ("Homer Simpson", "Moe Szyslak", "Barney Gumble")
 
-    // FIXME elastic >= v 6.x no more multiple Parent / Child relationship allowed within the same index
-//    val childIndices =
-//      pClient.bulk[String](children.iterator, identity, None, None, None, None, None, Some("parentId"))(
-//        jclient,
-//        BulkOptions("person2", "child", 1000),
-//        system)
-//    pClient.refresh("person2")
-//
-//    childIndices should contain only "person2"
-//
-//    blockUntilCount(2, "person2", "child")
-//
-//    "person2" should haveCount(5)
   }
 
   "Bulk index valid json with an id key and a suffix key" should "work" in {

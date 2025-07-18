@@ -178,7 +178,11 @@ trait IndexApi { _: RefreshApi =>
 
   def indexAsync(index: String, id: String, source: String)(implicit
     ec: ExecutionContext
-  ): Future[Boolean] = Future(this.index(index, id, source))
+  ): Future[Boolean] = {
+    Future {
+      this.index(index, id, source)
+    }
+  }
 }
 
 trait UpdateApi { _: RefreshApi =>
@@ -239,7 +243,11 @@ trait UpdateApi { _: RefreshApi =>
 
   def updateAsync(index: String, id: String, source: String, upsert: Boolean)(implicit
     ec: ExecutionContext
-  ): Future[Boolean] = Future(this.update(index, id, source, upsert))
+  ): Future[Boolean] = {
+    Future {
+      this.update(index, id, source, upsert)
+    }
+  }
 }
 
 trait DeleteApi { _: RefreshApi =>
@@ -277,7 +285,11 @@ trait DeleteApi { _: RefreshApi =>
 
   def deleteAsync(uuid: String, index: String)(implicit
     ec: ExecutionContext
-  ): Future[Boolean] = Future(this.delete(uuid, index))
+  ): Future[Boolean] = {
+    Future {
+      this.delete(uuid, index)
+    }
+  }
 
 }
 
@@ -501,9 +513,9 @@ trait BulkApi { _: RefreshApi with SettingsApi =>
 
 trait CountApi {
   def countAsync(query: JSONQuery)(implicit ec: ExecutionContext): Future[Option[Double]] = {
-    Future(
+    Future {
       this.count(query)
-    )
+    }
   }
 
   def count(query: JSONQuery): Option[Double]
@@ -530,7 +542,9 @@ trait GetApi {
     index: Option[String] = None,
     maybeType: Option[String] = None
   )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[Option[U]] = {
-    Future(this.get[U](id, index, maybeType))
+    Future {
+      this.get[U](id, index, maybeType)
+    }
   }
 }
 
@@ -620,5 +634,4 @@ trait SearchApi {
     m2: Manifest[I],
     formats: Formats
   ): List[List[(U, List[I])]]
-
 }
