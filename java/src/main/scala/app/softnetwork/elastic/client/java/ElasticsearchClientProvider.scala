@@ -1,12 +1,12 @@
-package app.softnetwork.elastic.client.rest
+package app.softnetwork.elastic.client.java
 
 import app.softnetwork.elastic.persistence.query.ElasticProvider
 import app.softnetwork.persistence.ManifestWrapper
 import app.softnetwork.persistence.model.Timestamped
 
-trait RestHighLevelClientProvider[T <: Timestamped]
+trait ElasticsearchClientProvider[T <: Timestamped]
     extends ElasticProvider[T]
-    with RestHighLevelClientApi {
+    with ElasticsearchClientApi {
   _: ManifestWrapper[T] =>
 
 }

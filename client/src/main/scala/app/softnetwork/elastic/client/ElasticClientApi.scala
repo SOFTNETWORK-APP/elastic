@@ -239,9 +239,7 @@ trait UpdateApi { _: RefreshApi =>
   )
   def updateAsync(index: String, indexType: String, id: String, source: String, upsert: Boolean)(
     implicit ec: ExecutionContext
-  ): Future[Boolean] = {
-    this.updateAsync(index, id, source, upsert)
-  }
+  ): Future[Boolean] = this.updateAsync(index, id, source, upsert)
 
   def updateAsync(index: String, id: String, source: String, upsert: Boolean)(implicit
     ec: ExecutionContext

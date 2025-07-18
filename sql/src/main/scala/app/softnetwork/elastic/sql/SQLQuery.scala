@@ -45,7 +45,7 @@ case class SQLQuery(query: String, score: Option[Double] = None) {
                       }
                       size 0
                     )
-                }).string().replace("\"version\":true,", "") /*FIXME*/
+                }).string.replace("\"version\":true,", "") /*FIXME*/
               )
             )
           })

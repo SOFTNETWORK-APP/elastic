@@ -1,6 +1,6 @@
 organization := "app.softnetwork.elastic"
 
-name := "elastic-rest-client"
+name := "elastic-java-client"
 
 val jacksonExclusions = Seq(
   ExclusionRule(organization = "com.fasterxml.jackson.core"),
@@ -12,7 +12,7 @@ val jacksonExclusions = Seq(
 
 val rest = Seq(
   "org.elasticsearch" % "elasticsearch" % Versions.elasticSearch exclude ("org.apache.logging.log4j", "log4j-api"),
-  "org.elasticsearch.client" % "elasticsearch-rest-high-level-client" % Versions.elasticSearch exclude ("org.elasticsearch", "elasticsearch"),
+  "co.elastic.clients" % "elasticsearch-java" % Versions.elasticSearch exclude ("org.elasticsearch", "elasticsearch"),
   "org.elasticsearch.client" % "elasticsearch-rest-client" % Versions.elasticSearch
 ).map(_.excludeAll(jacksonExclusions: _*))
 

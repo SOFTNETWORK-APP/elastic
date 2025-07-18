@@ -46,8 +46,8 @@ trait ElasticDockerTestKit extends ElasticTestKit { _: Suite =>
       "/usr/share/elasticsearch/tmp",
       BindMode.READ_WRITE
     )
-    container.addEnv("ES_JAVA_OPTS", "-Xms1024m -Xmx1024m")
-    container.setWaitStrategy(Wait.forHttp("/").forStatusCode(200))
+    // container.addEnv("ES_JAVA_OPTS", "-Xms1024m -Xmx1024m")
+    // container.setWaitStrategy(Wait.forHttp("/").forStatusCode(200))
     container.withStartupTimeout(Duration.ofMinutes(2))
   }
 

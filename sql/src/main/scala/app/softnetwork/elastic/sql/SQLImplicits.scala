@@ -1,7 +1,5 @@
 package app.softnetwork.elastic.sql
 
-//import com.sksamuel.elastic4s.requests.searches.term.{BuildableTermsQuery, TermsQuery}
-
 import scala.util.matching.Regex
 
 /** Created by smanciot on 27/06/2018.
@@ -38,9 +36,5 @@ object SQLImplicits {
     )
 
   implicit def sqllikeToRegex(value: String): Regex = toRegex(value).r
-
-//  implicit def BuildableTermsNoOp[T]: BuildableTermsQuery[T] = new BuildableTermsQuery[T] {
-//    override def build(q: TermsQuery[T]): Any = null // not used by the http builders
-//  }
 
 }
