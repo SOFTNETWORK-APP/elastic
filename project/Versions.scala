@@ -6,11 +6,11 @@ object Versions {
 
   val typesafeConfig = "1.4.2"
 
-  val kxbmap = "0.4.4"
+  val kxbmap = "0.6.1"
 
   val jackson = "2.19.0" // 2.13.3 -> 2.19.0
 
-  val json4s = "4.0.6" // 3.6.12 -> 4.0.6
+  val json4s = "4.0.7" // 4.0.6 -> 4.0.7
 
   val scalaLogging = "3.9.2"
 
@@ -20,15 +20,15 @@ object Versions {
 
   val log4s = "1.8.2"
 
-  val elasticSearch = "8.18.3"
+  val elasticSearch = "9.0.3"
 
-  val elastic4s = "8.18.2"
+  val elastic4s = "9.0.0"
 
   val log4j = "2.8.2"
 
   val testContainers = "1.18.0"
 
-  val genericPersistence = "0.7.1"
+  val genericPersistence = "0.8-SNAPSHOT"
 
   val gson = "2.8.0"
 

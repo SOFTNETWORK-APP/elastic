@@ -20,8 +20,7 @@ import _root_.java.io.ByteArrayInputStream
 import _root_.java.nio.file.{Files, Paths}
 import _root_.java.util.concurrent.TimeUnit
 import _root_.java.util.UUID
-
-import scala.concurrent.{Await, ExecutionContextExecutor}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor}
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success}
 
@@ -38,6 +37,8 @@ trait ElasticClientSpec
   implicit val system: ActorSystem = ActorSystem(generateUUID())
 
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
+
+  override implicit def ec: ExecutionContext = executionContext
 
   implicit val formats: Formats = commonFormats
 
@@ -76,9 +77,11 @@ trait ElasticClientSpec
   }
 
   private def settings: Map[String, String] = {
-    elasticClient.execute {
-      getSettings("person")
-    } complete () match {
+    elasticClient
+      .execute {
+        getSettings("person")
+      }
+      .complete() match {
       case Success(s) => s.result.settingsForIndex("person")
       case Failure(f) => throw f
     }
@@ -125,9 +128,11 @@ trait ElasticClientSpec
 
     "person1" should haveCount(3)
 
-    val response = elasticClient.execute {
-      search("person1").query(MatchAllQuery())
-    } complete ()
+    val response = elasticClient
+      .execute {
+        search("person1").query(MatchAllQuery())
+      }
+      .complete()
 
     response.result.hits.hits.foreach { h =>
       h.id should not be h.sourceField("uuid")
@@ -140,13 +145,15 @@ trait ElasticClientSpec
   }
 
   "Bulk index valid json with an id key but no suffix key" should "work" in {
-    elasticClient.execute(
-      createIndex("person2").mapping(
-        properties(
-          objectField("child").copy(properties = Seq(textField("name").copy(index = Some(false))))
+    elasticClient
+      .execute(
+        createIndex("person2").mapping(
+          properties(
+            objectField("child").copy(properties = Seq(textField("name").copy(index = Some(false))))
+          )
         )
       )
-    ) complete () match {
+      .complete() match {
       case Success(_) => ()
       case Failure(f) => throw f
     }
@@ -161,9 +168,11 @@ trait ElasticClientSpec
 
     "person2" should haveCount(3)
 
-    val response = elasticClient.execute {
-      search("person2").query(MatchAllQuery())
-    } complete ()
+    val response = elasticClient
+      .execute {
+        search("person2").query(MatchAllQuery())
+      }
+      .complete()
 
     response.result.hits.hits.foreach { h =>
       h.id shouldBe h.sourceField("uuid")
@@ -190,9 +199,11 @@ trait ElasticClientSpec
     "person-1967-11-21" should haveCount(2)
     "person-1969-05-09" should haveCount(1)
 
-    val response = elasticClient.execute {
-      search("person-1967-11-21", "person-1969-05-09").query(MatchAllQuery())
-    } complete ()
+    val response = elasticClient
+      .execute {
+        search("person-1967-11-21", "person-1969-05-09").query(MatchAllQuery())
+      }
+      .complete()
 
     response.result.hits.hits.foreach { h =>
       h.id shouldBe h.sourceField("uuid")
@@ -225,9 +236,11 @@ trait ElasticClientSpec
 
     "person4" should haveCount(3)
 
-    val response = elasticClient.execute {
-      search("person4").query(MatchAllQuery())
-    } complete ()
+    val response = elasticClient
+      .execute {
+        search("person4").query(MatchAllQuery())
+      }
+      .complete()
 
     logger.info(s"response: ${response.result.hits.hits.mkString("\n")}")
 
@@ -261,9 +274,11 @@ trait ElasticClientSpec
     "person5-1967-11-21" should haveCount(2)
     "person5-1969-05-09" should haveCount(1)
 
-    val response = elasticClient.execute {
-      search("person5-1967-11-21", "person5-1969-05-09").query(MatchAllQuery())
-    } complete ()
+    val response = elasticClient
+      .execute {
+        search("person5-1967-11-21", "person5-1969-05-09").query(MatchAllQuery())
+      }
+      .complete()
 
     response.result.hits.hits.foreach { h =>
       h.id shouldBe h.sourceAsMap.getOrElse("uuid", "")
@@ -290,7 +305,7 @@ trait ElasticClientSpec
 
     import scala.collection.immutable.Seq
 
-    pClient.countAsync(JSONQuery("{}", Seq[String]("person6"), Seq[String]())) complete () match {
+    pClient.countAsync(JSONQuery("{}", Seq[String]("person6"), Seq[String]())).complete() match {
       case Success(s) => s.getOrElse(0d).toInt should ===(3)
       case Failure(f) => fail(f.getMessage)
     }

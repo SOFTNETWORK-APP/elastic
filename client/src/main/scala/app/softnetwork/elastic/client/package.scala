@@ -7,7 +7,7 @@ import app.softnetwork.serialization._
 import com.google.gson.{Gson, JsonElement, JsonObject}
 import com.typesafe.config.{Config, ConfigFactory}
 import com.typesafe.scalalogging.StrictLogging
-import configs.Configs
+import configs.ConfigReader
 import org.json4s.Formats
 
 import scala.collection.immutable.Seq
@@ -33,8 +33,8 @@ package object client {
 
   object ElasticConfig extends StrictLogging {
     def apply(config: Config): ElasticConfig = {
-      Configs[ElasticConfig]
-        .get(config.withFallback(ConfigFactory.load("softnetwork-elastic.conf")), "elastic")
+      ConfigReader[ElasticConfig]
+        .read(config.withFallback(ConfigFactory.load("softnetwork-elastic.conf")), "elastic")
         .toEither match {
         case Left(configError) =>
           logger.error(s"Something went wrong with the provided arguments $configError")

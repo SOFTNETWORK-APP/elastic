@@ -16,20 +16,16 @@ import co.elastic.clients.elasticsearch.core.bulk.{
   UpdateAction,
   UpdateOperation
 }
-import co.elastic.clients.elasticsearch.core.msearch.{
-  MultisearchBody,
-  MultisearchHeader,
-  RequestItem
-}
+import co.elastic.clients.elasticsearch.core.msearch.{MultisearchHeader, RequestItem}
 import co.elastic.clients.elasticsearch.core._
+import co.elastic.clients.elasticsearch.core.search.SearchRequestBody
 import co.elastic.clients.elasticsearch.indices.update_aliases.{Action, AddAction, RemoveAction}
 import co.elastic.clients.elasticsearch.indices._
 import com.google.gson.JsonParser
 
 import _root_.java.io.StringReader
 import _root_.java.util.{Map => JMap}
-
-import scala.collection.JavaConverters.{collectionAsScalaIterableConverter, seqAsJavaListConverter}
+import scala.jdk.CollectionConverters._
 import org.json4s.Formats
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -274,18 +270,18 @@ trait ElasticsearchClientSingleValueAggregateApi
                   aggType match {
                     case sql.Count =>
                       if (aggregation.distinct) {
-                        root.get(agg).cardinality().value()
+                        root.get(agg).cardinality().value().toDouble
                       } else {
-                        root.get(agg).valueCount().value()
+                        root.get(agg).valueCount().value().toDouble
                       }
                     case sql.Sum =>
-                      root.get(agg).sum().value()
+                      root.get(agg).sum().value().toDouble
                     case sql.Avg =>
-                      root.get(agg).avg().value()
+                      root.get(agg).avg().value().toDouble
                     case sql.Min =>
-                      root.get(agg).min().value()
+                      root.get(agg).min().value().toDouble
                     case sql.Max =>
-                      root.get(agg).max().value()
+                      root.get(agg).max().value().toDouble
                     case _ => 0d
                   },
                   None
@@ -643,7 +639,7 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
     val items = queries.map { query =>
       new RequestItem.Builder()
         .header(new MultisearchHeader.Builder().index(query.indices.asJava).build())
-        .body(new MultisearchBody.Builder().withJson(new StringReader(query.query)).build())
+        .body(new SearchRequestBody.Builder().withJson(new StringReader(query.query)).build())
         .build()
     }
 
@@ -675,7 +671,7 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
     val items = queries.map { query =>
       new RequestItem.Builder()
         .header(new MultisearchHeader.Builder().index(query.indices.asJava).build())
-        .body(new MultisearchBody.Builder().withJson(new StringReader(query.query)).build())
+        .body(new SearchRequestBody.Builder().withJson(new StringReader(query.query)).build())
         .build()
     }
 
