@@ -29,10 +29,10 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-    - name: Set up JDK 8
+    - name: Set up JDK 17
       uses: actions/setup-java@v3
       with:
-        java-version: '8'
+        java-version: '17'
         distribution: 'temurin'
 #        cache: 'sbt'
     - name: Setup sbt launcher
@@ -46,7 +46,7 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
-        files: sql/target/scala-2.12/coverage-report/cobertura.xml,client/testkit/target/scala-2.12/coverage-report/cobertura.xml,persistence/target/scala-2.12/coverage-report/cobertura.xml,teskit/target/scala-2.12/coverage-report/cobertura.xml
+        files: sql/target/scala-2.13/coverage-report/cobertura.xml,client/testkit/target/scala-2.13/coverage-report/cobertura.xml,java/testkit/target/scala-2.13/coverage-report/cobertura.xml,persistence/target/scala-2.13/coverage-report/cobertura.xml,teskit/target/scala-2.13/coverage-report/cobertura.xml
         flags: unittests
         fail_ci_if_error: false
         verbose: true

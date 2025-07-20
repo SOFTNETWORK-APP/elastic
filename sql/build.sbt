@@ -10,13 +10,12 @@ val jackson = Seq(
   "com.fasterxml.jackson.dataformat" % "jackson-dataformat-yaml"   % Versions.jackson,
   "com.fasterxml.jackson.datatype" % "jackson-datatype-jdk8"   % Versions.jackson,
   "com.fasterxml.jackson.datatype" % "jackson-datatype-jsr310" % Versions.jackson,
-  "com.fasterxml.jackson.module" % "jackson-module-scala_2.12" % Versions.jackson,
   "com.fasterxml.jackson.module" % "jackson-module-parameter-names" % Versions.jackson,
   "com.fasterxml.jackson.module" %% "jackson-module-scala"    % Versions.jackson,
 )
 
 val elastic4s = Seq(
-  "nl.gn0s1s" %% "elastic4s-core"     % Versions.elastic4s exclude ("org.elasticsearch", "elasticsearch") exclude("org.slf4j", "slf4j-api"),
+  "nl.gn0s1s" %% "elastic4s-core" % Versions.elastic4s exclude ("org.elasticsearch", "elasticsearch") exclude("org.slf4j", "slf4j-api"),
 )
 
 val scalatest = Seq(
@@ -26,7 +25,7 @@ val scalatest = Seq(
 libraryDependencies ++= jackson ++ elastic4s ++ scalatest ++ Seq(
   "javax.activation" % "activation" % "1.1.1" % Test
 ) :+
-  "org.scala-lang" % "scala-reflect" % "2.12.18" :+
+  "org.scala-lang" % "scala-reflect" % "2.13.16" :+
   "com.google.code.gson" % "gson" % Versions.gson % Test
 
 

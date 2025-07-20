@@ -21,4 +21,5 @@ val json4s = Seq(
 ).map(_.excludeAll(jacksonExclusions: _*))
 
 libraryDependencies ++= configDependencies ++ json4s :+
-  "app.softnetwork.persistence" %% "persistence-core" % Versions.genericPersistence :+ "com.google.code.gson" % "gson" % Versions.gson
+  ("app.softnetwork.persistence" %% "persistence-core" % Versions.genericPersistence excludeAll(jacksonExclusions: _*)) :+
+  "com.google.code.gson" % "gson" % Versions.gson

@@ -4,20 +4,45 @@ import app.softnetwork.*
 // Defaults
 /////////////////////////////////
 
+lazy val scala213 = "2.13.16"
+lazy val javacCompilerVersion = "17"
+lazy val scalacCompilerOptions = Seq(
+  "-deprecation",
+  "-feature",
+  "-target:jvm-1.8"
+)
+
 ThisBuild / organization := "app.softnetwork"
 
 name := "elastic"
 
-ThisBuild / version := Versions.elasticSearch
+ThisBuild / version := "9.0-SNAPSHOT" //Versions.elasticSearch
 
-ThisBuild / scalaVersion := "2.12.18"
+ThisBuild / scalaVersion := scala213
 
-ThisBuild / scalacOptions ++= Seq("-deprecation", "-feature", "-target:jvm-1.8", "-Ypartial-unification")
+ThisBuild / dependencyOverrides ++= Seq(
+  "com.fasterxml.jackson.module" %% "jackson-module-scala" % Versions.jackson,
+  "com.github.jnr" % "jnr-ffi" % "2.2.17",
+  "com.github.jnr" % "jffi"    % "1.3.13" classifier "native",
+  "org.lmdbjava" % "lmdbjava" % "0.9.1" exclude("org.slf4j", "slf4j-api"),
+)
 
-ThisBuild / javacOptions ++= Seq("-source", "1.8", "-target", "1.8")
+lazy val moduleSettings = Seq(
+  crossScalaVersions := Seq(scala213),
+  scalacOptions ++= {
+    CrossVersion.partialVersion(scalaVersion.value) match {
+      case Some((2, 12)) => scalacCompilerOptions :+ "-Ypartial-unification"
+      case Some((2, 13)) => scalacCompilerOptions
+      case _             => Seq.empty
+    }
+  }
+)
+
+ThisBuild / javacOptions ++= Seq("-source", javacCompilerVersion, "-target", javacCompilerVersion)
 
 ThisBuild / resolvers ++= Seq(
   "Softnetwork Server" at "https://softnetwork.jfrog.io/artifactory/releases/",
+  "Softnetwork Snapshots" at "https://softnetwork.jfrog.io/artifactory/snapshots/",
   "Maven Central Server" at "https://repo1.maven.org/maven2",
   "Typesafe Server" at "https://repo.typesafe.com/typesafe/releases"
 )
@@ -32,6 +57,9 @@ val logging = Seq(
 
 val jacksonExclusions = Seq(
   ExclusionRule(organization = "com.fasterxml.jackson.core"),
+  ExclusionRule(organization = "com.fasterxml.jackson.dataformat"),
+  ExclusionRule(organization = "com.fasterxml.jackson.datatype"),
+  ExclusionRule(organization = "com.fasterxml.jackson.module"),
   ExclusionRule(organization = "org.codehaus.jackson")
 )
 
@@ -41,7 +69,7 @@ val json4s = Seq(
 ).map(_.excludeAll(jacksonExclusions: _*))
 
 ThisBuild / libraryDependencies ++= Seq(
-  "org.scala-lang.modules" %% "scala-parser-combinators" % "1.1.1"
+  "org.scala-lang.modules" %% "scala-parser-combinators" % "1.1.2"
 )// ++ configDependencies ++ json4s ++ logging
 
 ThisBuild / libraryDependencySchemes += "org.scala-lang.modules" %% "scala-xml" % VersionScheme.Always
@@ -54,21 +82,30 @@ lazy val sql = project.in(file("sql"))
 
 lazy val client = project.in(file("client"))
   .configs(IntegrationTest)
-  .settings(Defaults.itSettings)
+  .settings(
+    Defaults.itSettings,
+    moduleSettings
+  )
   .dependsOn(
     sql % "compile->compile;test->test;it->it"
   )
 
 lazy val persistence = project.in(file("persistence"))
   .configs(IntegrationTest)
-  .settings(Defaults.itSettings)
+  .settings(
+    Defaults.itSettings,
+    moduleSettings
+  )
   .dependsOn(
     client % "compile->compile;test->test;it->it"
   )
 
 lazy val java = project.in(file("java"))
   .configs(IntegrationTest)
-  .settings(Defaults.itSettings)
+  .settings(
+    Defaults.itSettings,
+    moduleSettings
+  )
   .dependsOn(
     persistence % "compile->compile;test->test;it->it"
   )
@@ -77,7 +114,8 @@ lazy val testKit = project.in(file("testkit"))
   .configs(IntegrationTest)
   .settings(
     Defaults.itSettings,
-    app.softnetwork.Info.infoSettings
+    app.softnetwork.Info.infoSettings,
+    moduleSettings
   )
   .enablePlugins(BuildInfoPlugin)
   .dependsOn(
@@ -86,5 +124,9 @@ lazy val testKit = project.in(file("testkit"))
 
 lazy val root = project.in(file("."))
   .configs(IntegrationTest)
-  .settings(Defaults.itSettings, Publish.noPublishSettings)
+  .settings(
+    Defaults.itSettings,
+    Publish.noPublishSettings,
+    crossScalaVersions := Nil
+  )
   .aggregate(sql, client, persistence, java, testKit)

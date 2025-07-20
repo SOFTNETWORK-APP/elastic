@@ -14,6 +14,7 @@ import org.scalatest.{BeforeAndAfterAll, Suite}
 import org.scalatest.matchers.{MatchResult, Matcher}
 import org.slf4j.Logger
 
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 /** Created by smanciot on 18/05/2021.
@@ -25,6 +26,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
   def elasticVersion: String = ElasticTestkitBuildInfo.version
 
   def elasticURL: String
+
+  implicit def ec: ExecutionContext
 
   lazy val elasticConfig: Config = ConfigFactory
     .parseString(elasticConfigAsString)
@@ -41,7 +44,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
        |}
        |""".stripMargin
 
-  lazy val elasticClient: ElasticClient = ElasticClient(
+  lazy val elasticClient: ElasticClient[Future] = ElasticClient(
     new JavaClient(
       RestClient
         .builder(
@@ -57,11 +60,13 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   override def beforeAll(): Unit = {
     start()
-    elasticClient.execute {
-      createIndexTemplate("all_templates", "*").settings(
-        Map("number_of_shards" -> 1, "number_of_replicas" -> 0)
-      )
-    } complete () match {
+    elasticClient
+      .execute {
+        createIndexTemplate("all_templates", "*").settings(
+          Map("number_of_shards" -> 1, "number_of_replicas" -> 0)
+        )
+      }
+      .complete() match {
       case Success(_) => ()
       case Failure(f) => throw f
     }
@@ -75,7 +80,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
   // Rewriting methods from IndexMatchers in elastic4s with the ElasticClient
   def haveCount(expectedCount: Int): Matcher[String] =
     (index: String) => {
-      elasticClient.execute(search(index).size(0)) complete () match {
+      elasticClient.execute(search(index).size(0)).complete() match {
         case Success(s) =>
           val count = s.result.totalHits
           MatchResult(
@@ -89,7 +94,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def containDoc(expectedId: String): Matcher[String] =
     (index: String) => {
-      elasticClient.execute(get(index, expectedId)) complete () match {
+      elasticClient.execute(get(index, expectedId)).complete() match {
         case Success(s) =>
           val exists = s.result.exists
           MatchResult(
@@ -103,7 +108,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def beCreated(): Matcher[String] =
     (index: String) => {
-      elasticClient.execute(indexExists(index)) complete () match {
+      elasticClient.execute(indexExists(index)).complete() match {
         case Success(s) =>
           val exists = s.result.isExists
           MatchResult(
@@ -117,7 +122,7 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def beEmpty(): Matcher[String] =
     (index: String) => {
-      elasticClient.execute(search(index).size(0)) complete () match {
+      elasticClient.execute(search(index).size(0)).complete() match {
         case Success(s) =>
           val count = s.result.totalHits
           MatchResult(
@@ -139,7 +144,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
     elasticClient
       .execute {
         refreshIndex(indexes)
-      } complete () match {
+      }
+      .complete() match {
       case Success(s) => s.result
       case Failure(f) => throw f
     }
@@ -150,7 +156,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
       elasticClient
         .execute {
           clusterHealth()
-        } complete () match {
+        }
+        .complete() match {
         case Success(s) => s.result.status.toUpperCase == "GREEN"
         case Failure(f) => throw f
       }
@@ -162,9 +169,11 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
   }
 
   def ensureIndexExists(index: String): Unit = {
-    elasticClient.execute {
-      createIndex(index)
-    } complete () match {
+    elasticClient
+      .execute {
+        createIndex(index)
+      }
+      .complete() match {
       case Success(_) => ()
       case Failure(f) =>
         f match {
@@ -179,7 +188,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
     elasticClient
       .execute {
         indexExists(name)
-      } complete () match {
+      }
+      .complete() match {
       case Success(s) => s.result.isExists
       case _          => false
     }
@@ -189,7 +199,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
     elasticClient
       .execute {
         aliasExists(name)
-      } complete () match {
+      }
+      .complete() match {
       case Success(s) => s.result.isExists
       case _          => false
     }
@@ -197,9 +208,11 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def deleteIndex(name: String): Unit = {
     if (doesIndexExists(name)) {
-      elasticClient.execute {
-        ElasticDsl.deleteIndex(name)
-      } complete () match {
+      elasticClient
+        .execute {
+          ElasticDsl.deleteIndex(name)
+        }
+        .complete() match {
         case Success(_) => ()
         case Failure(f) => throw f
       }
@@ -217,7 +230,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
       elasticClient
         .execute {
           get(index, id)
-        } complete () match {
+        }
+        .complete() match {
         case Success(s) => s.result.exists
         case _          => false
       }
@@ -226,9 +240,11 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
 
   def blockUntilCount(expected: Long, index: String): Unit = {
     blockUntil(s"Expected count of $expected") { () =>
-      elasticClient.execute {
-        search(index).matchAllQuery().size(0)
-      } complete () match {
+      elasticClient
+        .execute {
+          search(index).matchAllQuery().size(0)
+        }
+        .complete() match {
         case Success(s) => expected <= s.result.totalHits
         case Failure(f) => throw f
       }
@@ -240,9 +256,11 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
     */
   def blockUntilCount(expected: Long, index: String, types: String*): Unit = {
     blockUntil(s"Expected count of $expected") { () =>
-      elasticClient.execute {
-        search(index).matchAllQuery().size(0)
-      } complete () match {
+      elasticClient
+        .execute {
+          search(index).matchAllQuery().size(0)
+        }
+        .complete() match {
         case Success(s) => expected <= s.result.totalHits
         case Failure(f) => throw f
       }
@@ -254,7 +272,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
       elasticClient
         .execute {
           search(index).size(0)
-        } complete () match {
+        }
+        .complete() match {
         case Success(s) => expected == s.result.totalHits
         case Failure(f) => throw f
       }
@@ -266,7 +285,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
       elasticClient
         .execute {
           search(Indexes(index)).size(0)
-        } complete () match {
+        }
+        .complete() match {
         case Success(s) => s.result.totalHits == 0
         case Failure(f) => throw f
       }
@@ -301,7 +321,8 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
       elasticClient
         .execute {
           get(index, id)
-        } complete () match {
+        }
+        .complete() match {
         case Success(s) => s.result.version == version
         case Failure(f) => throw f
       }

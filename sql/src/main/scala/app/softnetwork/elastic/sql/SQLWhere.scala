@@ -461,7 +461,7 @@ case class ElasticGeoDistance(
     innerHitsNames: Set[String] = Set.empty,
     currentQuery: Option[ElasticBoolQuery]
   ): Query = {
-    geoDistanceQuery(identifier.columnName).point(lat.value, lon.value) distance distance.value
+    geoDistanceQuery(identifier.columnName, lat.value, lon.value) distance distance.value
   }
 }
 
