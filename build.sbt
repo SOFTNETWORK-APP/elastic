@@ -16,7 +16,7 @@ ThisBuild / organization := "app.softnetwork"
 
 name := "elastic"
 
-ThisBuild / version := "9.0-SNAPSHOT" //Versions.elasticSearch
+ThisBuild / version := Versions.elasticSearch
 
 ThisBuild / scalaVersion := scala213
 
