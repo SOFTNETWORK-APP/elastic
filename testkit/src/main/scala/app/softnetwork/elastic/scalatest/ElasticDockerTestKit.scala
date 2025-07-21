@@ -10,7 +10,7 @@ import java.nio.file.Files
 import java.time.Duration
 
 /** Created by smanciot on 28/06/2018.
- */
+  */
 trait ElasticDockerTestKit extends ElasticTestKit { _: Suite =>
 
   override lazy val elasticURL: String = s"http://${elasticContainer.getHttpHostAddress}"
