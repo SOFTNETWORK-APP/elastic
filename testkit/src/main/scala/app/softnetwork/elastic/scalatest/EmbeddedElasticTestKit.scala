@@ -6,6 +6,7 @@ import pl.allegro.tech.embeddedelasticsearch.PopularProperties._
 
 import java.net.ServerSocket
 import java.util.concurrent.TimeUnit
+import scala.reflect.io.Path
 
 trait EmbeddedElasticTestKit extends ElasticTestKit { _: Suite =>
 
@@ -25,6 +26,7 @@ trait EmbeddedElasticTestKit extends ElasticTestKit { _: Suite =>
     .withElasticVersion(elasticVersion)
     .withSetting(HTTP_PORT, dynamicPort)
     .withSetting(CLUSTER_NAME, clusterName)
+    .withInstallationDirectory(Path("target/embedded-elastic").jfile)
     .withCleanInstallationDirectoryOnStop(true)
     .withEsJavaOpts("-Xms128m -Xmx512m")
     .withStartTimeout(2, TimeUnit.MINUTES)
