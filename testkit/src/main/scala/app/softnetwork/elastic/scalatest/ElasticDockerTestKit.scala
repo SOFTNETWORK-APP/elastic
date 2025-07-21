@@ -2,7 +2,7 @@ package app.softnetwork.elastic.scalatest
 
 import org.scalatest.Suite
 import org.testcontainers.containers.BindMode
-import org.testcontainers.containers.wait.strategy.Wait
+//import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.elasticsearch.ElasticsearchContainer
 import org.testcontainers.utility.DockerImageName
 
@@ -10,7 +10,7 @@ import java.nio.file.Files
 import java.time.Duration
 
 /** Created by smanciot on 28/06/2018.
-  */
+ */
 trait ElasticDockerTestKit extends ElasticTestKit { _: Suite =>
 
   override lazy val elasticURL: String = s"http://${elasticContainer.getHttpHostAddress}"
@@ -46,8 +46,8 @@ trait ElasticDockerTestKit extends ElasticTestKit { _: Suite =>
       "/usr/share/elasticsearch/tmp",
       BindMode.READ_WRITE
     )
-    container.addEnv("ES_JAVA_OPTS", "-Xms1024m -Xmx1024m")
-    container.setWaitStrategy(Wait.forHttp("/").forStatusCode(200))
+    // container.addEnv("ES_JAVA_OPTS", "-Xms1024m -Xmx1024m")
+    // container.setWaitStrategy(Wait.forHttp("/").forStatusCode(200))
     container.withStartupTimeout(Duration.ofMinutes(2))
   }
 
