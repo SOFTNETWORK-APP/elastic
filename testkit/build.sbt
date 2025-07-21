@@ -24,4 +24,4 @@ val elastic = Seq(
 )
 
 libraryDependencies ++= elastic  :+
-  "app.softnetwork.persistence" %% "persistence-core-testkit" % "0.6.2.1"
+  "app.softnetwork.persistence" %% "persistence-core-testkit" % Versions.genericPersistence
