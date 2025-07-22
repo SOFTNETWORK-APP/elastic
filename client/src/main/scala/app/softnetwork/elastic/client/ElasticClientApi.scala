@@ -564,7 +564,6 @@ trait SearchApi {
     }
   }
 
-
   def searchAsync[U](
     sqlQuery: SQLQuery
   )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] = Future(

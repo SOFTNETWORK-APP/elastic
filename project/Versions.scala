@@ -26,7 +26,7 @@ object Versions {
 
   val log4j = "2.8.2"
 
-  val testContainers = "1.18.0"
+  val testContainers = "1.20.6"
 
   val genericPersistence = "0.7.3"
 
