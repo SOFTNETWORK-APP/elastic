@@ -8,7 +8,7 @@ name: Release
 on:
   workflow_dispatch:
   push:
-    branches: 
+    branches:
       - 'main'
 #      - '*'         # matches every branch that doesn't contain a '/'
 #      - '*/*'       # matches every branch containing a single '/'
@@ -28,6 +28,7 @@ jobs:
         echo "JFROG_USER=${{ secrets.JFROG_USER }}" >>  $GITHUB_ENV
         echo "JFROG_PASSWORD=${{ secrets.JFROG_PASSWORD }}" >>  $GITHUB_ENV
         echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >>  $GITHUB_ENV
+        echo "CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }}" >>  $GITHUB_ENV
     - name: Checkout
       uses: actions/checkout@v3
     - name: Set up JDK 17
