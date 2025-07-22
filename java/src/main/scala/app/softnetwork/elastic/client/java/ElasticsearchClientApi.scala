@@ -28,10 +28,7 @@ import com.google.gson.JsonParser
 
 import _root_.java.io.StringReader
 import _root_.java.util.{Map => JMap}
-import scala.collection.JavaConverters.{
-  collectionAsScalaIterableConverter,
-  seqAsJavaListConverter
-}
+import scala.collection.JavaConverters.{collectionAsScalaIterableConverter, seqAsJavaListConverter}
 import org.json4s.Formats
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
