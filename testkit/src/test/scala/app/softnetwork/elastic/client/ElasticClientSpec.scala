@@ -19,6 +19,7 @@ import org.slf4j.{Logger, LoggerFactory}
 
 import _root_.java.io.ByteArrayInputStream
 import _root_.java.nio.file.{Files, Paths}
+import _root_.java.time.format.DateTimeFormatter
 import _root_.java.util.concurrent.TimeUnit
 import _root_.java.util.UUID
 import scala.concurrent.{Await, ExecutionContextExecutor}
@@ -698,8 +699,7 @@ trait ElasticClientSpec
         | p.birthDate,
         | p.children,
         | inner_children.name,
-        | inner_children.birthDate,
-        | inner_children.parentId
+        | inner_children.birthDate
         |FROM
         | parent as p,
         | UNNEST(p.children) as inner_children
@@ -708,10 +708,15 @@ trait ElasticClientSpec
         |""".stripMargin,
       "inner_children"
     )
-    assert(results.size == 1)
+    results.size shouldBe 1
     val result = results.head
-    assert(result._1.uuid == "A16")
-    assert(result._1.children.size == 2)
-    assert(result._2.size == 2)
+    result._1.uuid shouldBe "A16"
+    result._1.children.size shouldBe 2
+    result._2.size shouldBe 2
+    result._2.map(_.name) should contain allOf ("Steve Gumble", "Josh Gumble")
+    result._2.map(
+      _.birthDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    ) should contain allOf ("1999-05-09", "2002-05-09")
+    result._2.map(_.parentId) should contain only "A16"
   }
 }
