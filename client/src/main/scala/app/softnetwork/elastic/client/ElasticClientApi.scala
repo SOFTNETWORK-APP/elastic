@@ -579,7 +579,7 @@ trait SearchApi {
       case Some(searchRequest) =>
         val indices = collection.immutable.Seq(searchRequest.sources: _*)
         val jsonQuery = JSONQuery(searchRequest.query, indices)
-        searchWithInnerHits(jsonQuery, innerField)
+        searchWithInnerHits(jsonQuery, innerField)(m1, m2, formats)
       case None =>
         throw new IllegalArgumentException(
           s"SQL query ${sqlQuery.query} does not contain a valid search request"

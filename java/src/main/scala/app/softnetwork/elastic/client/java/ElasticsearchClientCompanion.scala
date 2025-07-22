@@ -5,6 +5,7 @@ import co.elastic.clients.elasticsearch.{ElasticsearchAsyncClient, Elasticsearch
 import co.elastic.clients.json.jackson.JacksonJsonpMapper
 import co.elastic.clients.transport.rest_client.RestClientTransport
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.ClassTagExtensions
 import com.typesafe.scalalogging.StrictLogging
 import org.apache.http.HttpHost
 import org.apache.http.auth.{AuthScope, UsernamePasswordCredentials}
@@ -23,7 +24,7 @@ trait ElasticsearchClientCompanion extends StrictLogging {
 
   private var asyncClient: Option[ElasticsearchAsyncClient] = None
 
-  lazy val mapper = new ObjectMapper()
+  lazy val mapper: ObjectMapper with ClassTagExtensions = new ObjectMapper() with ClassTagExtensions
 
   def transport: RestClientTransport = {
     val credentialsProvider = new BasicCredentialsProvider()
@@ -73,6 +74,13 @@ trait ElasticsearchClientCompanion extends StrictLogging {
       else promise.success(result)
     }
     promise.future
+  }
+
+  protected def extractSource(value: AnyRef): Option[String] = {
+    val s = value.toString
+    val idx = s.indexOf(':')
+    if (idx >= 0 && idx + 1 < s.length) Some(s.substring(idx + 1).trim)
+    else None
   }
 
 }

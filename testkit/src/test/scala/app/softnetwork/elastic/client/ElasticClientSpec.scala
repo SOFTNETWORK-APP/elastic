@@ -44,6 +44,7 @@ trait ElasticClientSpec
   def pClient: ElasticProvider[Person] with ElasticClientApi
   def sClient: ElasticProvider[Sample] with ElasticClientApi
   def bClient: ElasticProvider[Binary] with ElasticClientApi
+  def parentClient: ElasticProvider[Parent] with ElasticClientApi
 
   import scala.language.implicitConversions
 
@@ -142,7 +143,7 @@ trait ElasticClientSpec
   )
 
   private val personsWithUpsert =
-    persons :+ """ { "uuid": "A16", "name": "Barney Gumble2", "birthDate": "1969-05-09", "children": [{ "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"}, { "parentId": "A16", "name": "Josh Gumble", "birthDate": "1999-05-09"}], "childrenCount": 2 } """
+    persons :+ """ { "uuid": "A16", "name": "Barney Gumble2", "birthDate": "1969-05-09", "children": [{ "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"}, { "parentId": "A16", "name": "Josh Gumble", "birthDate": "2002-05-09"}], "childrenCount": 2 } """
 
   val children: List[String] = List(
     """ { "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"} """,
@@ -364,7 +365,7 @@ trait ElasticClientSpec
     r2.size should ===(1)
     r2.map(_.uuid) should contain("A16")
 
-    pClient.searchAsync[Person](SQLQuery("select * from person7 where _id=\"A16\"")) onComplete {
+    pClient.searchAsync[Person]("select * from person7 where _id=\"A16\"") onComplete {
       case Success(r) =>
         r.size should ===(1)
         r.map(_.uuid) should contain("A16")
@@ -586,34 +587,34 @@ trait ElasticClientSpec
 
     // test distinct count aggregation
     pClient.aggregate(
-      SQLQuery("select count(distinct p.uuid) as c from person10 p")
+      "select count(distinct p.uuid) as c from person10 p"
     ) complete () match {
       case Success(s) => s.headOption.flatMap(_.asDoubleOption).getOrElse(0d) should ===(3d)
       case Failure(f) => fail(f.getMessage)
     }
 
     // test count aggregation
-    pClient.aggregate(SQLQuery("select count(p.uuid) as c from person10 p")) complete () match {
+    pClient.aggregate("select count(p.uuid) as c from person10 p") complete () match {
       case Success(s) => s.headOption.flatMap(_.asDoubleOption).getOrElse(0d) should ===(3d)
       case Failure(f) => fail(f.getMessage)
     }
 
     // test max aggregation on date field
-    pClient.aggregate(SQLQuery("select max(p.birthDate) as c from person10 p")) complete () match {
+    pClient.aggregate("select max(p.birthDate) as c from person10 p") complete () match {
       case Success(s) =>
         s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1969-05-09T00:00:00.000Z")
       case Failure(f) => fail(f.getMessage)
     }
 
     // test min aggregation on date field
-    pClient.aggregate(SQLQuery("select min(p.birthDate) as c from person10 p")) complete () match {
+    pClient.aggregate("select min(p.birthDate) as c from person10 p") complete () match {
       case Success(s) =>
         s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1967-11-21T00:00:00.000Z")
       case Failure(f) => fail(f.getMessage)
     }
 
     // test avg aggregation on date field
-    pClient.aggregate(SQLQuery("select avg(p.birthDate) as c from person10 p")) complete () match {
+    pClient.aggregate("select avg(p.birthDate) as c from person10 p") complete () match {
       case Success(s) =>
         s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1968-05-17T08:00:00.000Z")
       case Failure(f) => fail(f.getMessage)
@@ -621,12 +622,96 @@ trait ElasticClientSpec
 
     // test sum aggregation on integer field
     pClient.aggregate(
-      SQLQuery("select sum(p.childrenCount) as c from person10 p")
+      "select sum(p.childrenCount) as c from person10 p"
     ) complete () match {
       case Success(s) =>
         s.headOption.flatMap(_.asDoubleOption).getOrElse(0d) should ===(2d)
       case Failure(f) => fail(f.getMessage)
     }
 
+  }
+
+  "Nested queries" should "work" in {
+    parentClient.createIndex("parent") shouldBe true
+    val mapping =
+      """{
+        |  "properties": {
+        |    "birthDate": {
+        |      "type": "date"
+        |    },
+        |    "uuid": {
+        |      "type": "keyword"
+        |    },
+        |    "name": {
+        |      "type": "keyword"
+        |    },
+        |    "createdDate": {
+        |      "type": "date",
+        |      "null_value": "1970-01-01"
+        |    },
+        |    "lastUpdated": {
+        |      "type": "date",
+        |      "null_value": "1970-01-01"
+        |    },
+        |    "children": {
+        |      "type": "nested",
+        |      "include_in_parent": true,
+        |      "properties": {
+        |        "name": {
+        |          "type": "keyword"
+        |        },
+        |        "birthDate": {
+        |          "type": "date"
+        |        }
+        |      }
+        |    },
+        |    "childrenCount": {
+        |      "type": "integer"
+        |    }
+        |  }
+        |}
+    """.stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    logger.info(s"mapping: $mapping")
+    parentClient.setMapping("parent", mapping) shouldBe true
+
+    implicit val bulkOptions: BulkOptions = BulkOptions("parent", "parent", 1000)
+    val indices =
+      parentClient
+        .bulk[String](personsWithUpsert.iterator, identity, Some("uuid"), None, None, Some(true))
+    refresh(indices)
+    parentClient.flush("parent")
+    parentClient.refresh("parent")
+
+    indices should contain only "parent"
+
+    blockUntilCount(3, "parent")
+
+    "parent" should haveCount(3)
+
+    val parents = parentClient.search[Parent]("select * from parent")
+    assert(parents.size == 3)
+
+    val results = parentClient.searchWithInnerHits[Parent, Child](
+      """SELECT
+        | p.uuid,
+        | p.name,
+        | p.birthDate,
+        | p.children,
+        | inner_children.name,
+        | inner_children.birthDate,
+        | inner_children.parentId
+        |FROM
+        | parent as p,
+        | UNNEST(p.children) as inner_children
+        |WHERE
+        | inner_children.name is not null AND p.uuid = 'A16'
+        |""".stripMargin,
+      "inner_children"
+    )
+    assert(results.size == 1)
+    val result = results.head
+    assert(result._1.uuid == "A16")
+    assert(result._1.children.size == 2)
+    assert(result._2.size == 2)
   }
 }
