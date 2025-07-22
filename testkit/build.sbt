@@ -21,10 +21,3 @@ val elastic = Seq(
 
 libraryDependencies ++= elastic  :+
   "app.softnetwork.persistence" %% "persistence-core-testkit" % Versions.genericPersistence
-
-Test / fork := true
-Test / javaOptions ++= Seq(
-  "--add-opens", "java.base/java.lang=ALL-UNNAMED",
-  "--add-opens", "java.base/java.time=ALL-UNNAMED",
-  "--add-opens", "java.base/java.util=ALL-UNNAMED"
-)
