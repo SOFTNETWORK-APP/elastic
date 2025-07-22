@@ -173,13 +173,15 @@ trait JestSingleValueAggregateApi extends SingleValueAggregateApi with JestCount
                 SingleValueAggregateResult(
                   field,
                   aggType,
-                  result.getOrElse(0d),
+                  result.map(r => NumericValue(r.doubleValue())).getOrElse(EmptyValue),
                   None
                 )
               )
             case Failure(f) =>
               logger.error(f.getMessage, f.fillInStackTrace())
-              promise.success(SingleValueAggregateResult(field, aggType, 0d, Some(f.getMessage)))
+              promise.success(
+                SingleValueAggregateResult(field, aggType, EmptyValue, Some(f.getMessage))
+              )
           }
           promise.future
         case _ =>
@@ -216,19 +218,23 @@ trait JestSingleValueAggregateApi extends SingleValueAggregateApi with JestCount
                     aggType match {
                       case sql.Count =>
                         if (aggregation.distinct)
-                          root.getCardinalityAggregation(agg).getCardinality.doubleValue()
+                          NumericValue(
+                            root.getCardinalityAggregation(agg).getCardinality.doubleValue()
+                          )
                         else {
-                          root.getValueCountAggregation(agg).getValueCount.doubleValue()
+                          NumericValue(
+                            root.getValueCountAggregation(agg).getValueCount.doubleValue()
+                          )
                         }
                       case sql.Sum =>
-                        root.getSumAggregation(agg).getSum
+                        NumericValue(root.getSumAggregation(agg).getSum)
                       case sql.Avg =>
-                        root.getAvgAggregation(agg).getAvg
+                        NumericValue(root.getAvgAggregation(agg).getAvg)
                       case sql.Min =>
-                        root.getMinAggregation(agg).getMin
+                        NumericValue(root.getMinAggregation(agg).getMin)
                       case sql.Max =>
-                        root.getMaxAggregation(agg).getMax
-                      case _ => 0d
+                        NumericValue(root.getMaxAggregation(agg).getMax)
+                      case _ => EmptyValue
                     },
                     None
                   )
@@ -236,7 +242,9 @@ trait JestSingleValueAggregateApi extends SingleValueAggregateApi with JestCount
 
               case Failure(f) =>
                 logger.error(f.getMessage, f.fillInStackTrace())
-                promise.success(SingleValueAggregateResult(field, aggType, 0d, Some(f.getMessage)))
+                promise.success(
+                  SingleValueAggregateResult(field, aggType, EmptyValue, Some(f.getMessage))
+                )
             }
 
           promise.future
@@ -456,34 +464,6 @@ trait JestSearchApi extends SearchApi with JestClientCompanion {
       case Failure(f) =>
         logger.error(f.getMessage, f)
         List.empty
-    }
-  }
-
-  override def search[U](sqlQuery: SQLQuery)(implicit m: Manifest[U], formats: Formats): List[U] = {
-    val search: Option[Search] = sqlQuery.jestSearch
-    (search match {
-      case Some(s) =>
-        val result = apply().execute(s)
-        if (result.isSucceeded) {
-          Some(result)
-        } else {
-          logger.error(result.getErrorMessage)
-          None
-        }
-      case _ => None
-    }) match {
-      case Some(searchResult) =>
-        Try(
-          searchResult.getSourceAsStringList.asScala
-            .map(source => serialization.read[U](source))
-            .toList
-        ) match {
-          case Success(s) => s
-          case Failure(f) =>
-            logger.error(f.getMessage, f)
-            List.empty
-        }
-      case _ => List.empty
     }
   }
 

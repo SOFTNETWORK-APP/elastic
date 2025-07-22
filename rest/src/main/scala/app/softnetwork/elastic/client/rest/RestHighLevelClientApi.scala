@@ -254,13 +254,15 @@ trait RestHighLevelClientSingleValueAggregateApi
                 SingleValueAggregateResult(
                   field,
                   aggType,
-                  result.getOrElse(0d),
+                  result.map(r => NumericValue(r.doubleValue())).getOrElse(EmptyValue),
                   None
                 )
               )
             case Failure(f) =>
               logger.error(f.getMessage, f.fillInStackTrace())
-              promise.success(SingleValueAggregateResult(field, aggType, 0d, Some(f.getMessage)))
+              promise.success(
+                SingleValueAggregateResult(field, aggType, EmptyValue, Some(f.getMessage))
+              )
           }
           promise.future
         case _ =>
@@ -309,19 +311,19 @@ trait RestHighLevelClientSingleValueAggregateApi
                     aggType match {
                       case sql.Count =>
                         if (aggregation.distinct) {
-                          root.get(agg).asInstanceOf[Cardinality].value()
+                          NumericValue(root.get(agg).asInstanceOf[Cardinality].value())
                         } else {
-                          root.get(agg).asInstanceOf[ValueCount].value()
+                          NumericValue(root.get(agg).asInstanceOf[ValueCount].value())
                         }
                       case sql.Sum =>
-                        root.get(agg).asInstanceOf[Sum].value()
+                        NumericValue(root.get(agg).asInstanceOf[Sum].value())
                       case sql.Avg =>
-                        root.get(agg).asInstanceOf[Avg].value()
+                        NumericValue(root.get(agg).asInstanceOf[Avg].value())
                       case sql.Min =>
-                        root.get(agg).asInstanceOf[Min].value()
+                        NumericValue(root.get(agg).asInstanceOf[Min].value())
                       case sql.Max =>
-                        root.get(agg).asInstanceOf[Max].value()
-                      case _ => 0d
+                        NumericValue(root.get(agg).asInstanceOf[Max].value())
+                      case _ => EmptyValue
                     },
                     None
                   )
@@ -561,18 +563,6 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
     }
   }
 
-  override def search[U](sqlQuery: SQLQuery)(implicit m: Manifest[U], formats: Formats): List[U] = {
-    sqlQuery.search match {
-      case Some(searchRequest) =>
-        val indices = collection.immutable.Seq(searchRequest.sources: _*)
-        search[U](JSONQuery(searchRequest.query, indices))
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
-    }
-  }
-
   override def searchAsync[U](
     sqlQuery: SQLQuery
   )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] = {
@@ -621,23 +611,6 @@ trait RestHighLevelClientSearchApi extends SearchApi with RestHighLevelClientCom
         )
     }
     promise.future
-  }
-
-  override def searchWithInnerHits[U, I](sqlQuery: SQLQuery, innerField: String)(implicit
-    m1: Manifest[U],
-    m2: Manifest[I],
-    formats: Formats
-  ): List[(U, List[I])] = {
-    sqlQuery.search match {
-      case Some(searchRequest) =>
-        val indices = collection.immutable.Seq(searchRequest.sources: _*)
-        val jsonQuery = JSONQuery(searchRequest.query, indices)
-        searchWithInnerHits(jsonQuery, innerField)
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
-    }
   }
 
   override def searchWithInnerHits[U, I](jsonQuery: JSONQuery, innerField: String)(implicit

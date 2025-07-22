@@ -505,7 +505,17 @@ trait SearchApi {
 
   def search[U](jsonQuery: JSONQuery)(implicit m: Manifest[U], formats: Formats): List[U]
 
-  def search[U](sqlQuery: SQLQuery)(implicit m: Manifest[U], formats: Formats): List[U]
+  def search[U](sqlQuery: SQLQuery)(implicit m: Manifest[U], formats: Formats): List[U] = {
+    sqlQuery.search match {
+      case Some(searchRequest) =>
+        val indices = collection.immutable.Seq(searchRequest.sources: _*)
+        search[U](JSONQuery(searchRequest.query, indices))(m, formats)
+      case None =>
+        throw new IllegalArgumentException(
+          s"SQL query ${sqlQuery.query} does not contain a valid search request"
+        )
+    }
+  }
 
   def searchAsync[U](
     sqlQuery: SQLQuery
