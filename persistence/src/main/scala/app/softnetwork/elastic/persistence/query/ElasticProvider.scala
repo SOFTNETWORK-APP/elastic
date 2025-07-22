@@ -35,7 +35,7 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
       case Success(s) =>
         s
       case Failure(f) =>
-        logger.error(s"$pathOrElse -> f.getMessage", f)
+        logger.error(s"$pathOrElse -> ${f.getMessage}", f)
         "{}"
     }
   }

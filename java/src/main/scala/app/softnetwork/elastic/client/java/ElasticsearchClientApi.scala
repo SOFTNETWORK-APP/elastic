@@ -585,18 +585,6 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
     }
   }
 
-  override def search[U](sqlQuery: SQLQuery)(implicit m: Manifest[U], formats: Formats): List[U] = {
-    sqlQuery.search match {
-      case Some(searchRequest) =>
-        val indices = collection.immutable.Seq(searchRequest.sources: _*)
-        search[U](JSONQuery(searchRequest.query, indices))
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
-    }
-  }
-
   override def searchAsync[U](
     sqlQuery: SQLQuery
   )(implicit m: Manifest[U], ec: ExecutionContext, formats: Formats): Future[List[U]] = {
@@ -647,16 +635,23 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
     formats: Formats
   ): List[(U, List[I])] = {
     import jsonQuery._
-    val response = apply().search(
-      new SearchRequest.Builder()
-        .index(indices.asJava)
-        .withJson(
-          new StringReader(query)
-        )
-        .build(),
-      classOf[JMap[String, Object]]
-    )
-    Try(new JsonParser().parse(response.toString).getAsJsonObject ~> [U, I] innerField) match {
+    logger.info(s"Searching with query: $query on indices: ${indices.mkString(", ")}")
+    val response = apply()
+      .search(
+        new SearchRequest.Builder()
+          .index(indices.asJava)
+          .withJson(
+            new StringReader(query)
+          )
+          .build(),
+        classOf[JMap[String, Object]]
+      )
+      .toString
+    Try(
+      new JsonParser()
+        .parse(response.substring(response.indexOf(':') + 1).trim)
+        .getAsJsonObject ~> [U, I] innerField
+    ) match {
       case Success(s) => s
       case Failure(f) =>
         logger.error(f.getMessage, f)
