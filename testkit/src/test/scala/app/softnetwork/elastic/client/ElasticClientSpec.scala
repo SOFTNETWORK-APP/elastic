@@ -12,6 +12,7 @@ import app.softnetwork.elastic.model._
 import app.softnetwork.elastic.persistence.query.ElasticProvider
 import app.softnetwork.elastic.scalatest.ElasticDockerTestKit
 import app.softnetwork.persistence.person.model.Person
+import com.google.gson.JsonParser
 import com.typesafe.scalalogging.StrictLogging
 import org.json4s.Formats
 import org.slf4j.{Logger, LoggerFactory}
@@ -20,7 +21,6 @@ import _root_.java.io.ByteArrayInputStream
 import _root_.java.nio.file.{Files, Paths}
 import _root_.java.util.concurrent.TimeUnit
 import _root_.java.util.UUID
-
 import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration.Duration
 import scala.util.{Failure, Success}
@@ -69,10 +69,14 @@ trait ElasticClientSpec
     "create_delete" should not(beCreated())
   }
 
-  "Adding an alias" should "work" in {
+  "Adding an alias and then removing it" should "work" in {
     pClient.addAlias("person", "person_alias")
 
     doesAliasExists("person_alias") shouldBe true
+
+    pClient.removeAlias("person", "person_alias")
+
+    doesAliasExists("person_alias") shouldBe false
   }
 
   private def settings: Map[String, String] = {
@@ -86,11 +90,41 @@ trait ElasticClientSpec
 
   "Toggle refresh" should "work" in {
     pClient.toggleRefresh("person", enable = false)
-
-    settings.getOrElse("index.refresh_interval", "") shouldBe "-1"
+    new JsonParser()
+      .parse(pClient.loadSettings())
+      .getAsJsonObject
+      .get("person")
+      .getAsJsonObject
+      .get("settings")
+      .getAsJsonObject
+      .get("index")
+      .getAsJsonObject
+      .get("refresh_interval")
+      .getAsString shouldBe "-1"
+    // settings.getOrElse("index.refresh_interval", "") shouldBe "-1"
 
     pClient.toggleRefresh("person", enable = true)
-    settings.getOrElse("index.refresh_interval", "") shouldBe "1s"
+//    settings.getOrElse("index.refresh_interval", "") shouldBe "1s"
+    new JsonParser()
+      .parse(pClient.loadSettings())
+      .getAsJsonObject
+      .get("person")
+      .getAsJsonObject
+      .get("settings")
+      .getAsJsonObject
+      .get("index")
+      .getAsJsonObject
+      .get("refresh_interval")
+      .getAsString shouldBe "1s"
+  }
+
+  "Opening an index and then closing it" should "work" in {
+    pClient.openIndex("person")
+
+    isIndexOpened("person") shouldBe true
+
+    pClient.closeIndex("person")
+    isIndexClosed("person") shouldBe true
   }
 
   "Updating number of replicas" should "work" in {
@@ -102,17 +136,17 @@ trait ElasticClientSpec
   }
 
   val persons: List[String] = List(
-    """ { "uuid": "A12", "name": "Homer Simpson", "birthDate": "1967-11-21 12:00:00"} """,
-    """ { "uuid": "A14", "name": "Moe Szyslak",   "birthDate": "1967-11-21 12:00:00"} """,
-    """ { "uuid": "A16", "name": "Barney Gumble", "birthDate": "1969-05-09 21:00:00"} """
+    """ { "uuid": "A12", "name": "Homer Simpson", "birthDate": "1967-11-21", "childrenCount": 0} """,
+    """ { "uuid": "A14", "name": "Moe Szyslak",   "birthDate": "1967-11-21", "childrenCount": 0} """,
+    """ { "uuid": "A16", "name": "Barney Gumble", "birthDate": "1969-05-09", "childrenCount": 0} """
   )
 
   private val personsWithUpsert =
-    persons :+ """ { "uuid": "A16", "name": "Barney Gumble2", "birthDate": "1969-05-09 21:00:00"} """
+    persons :+ """ { "uuid": "A16", "name": "Barney Gumble2", "birthDate": "1969-05-09", "children": [{ "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"}, { "parentId": "A16", "name": "Josh Gumble", "birthDate": "1999-05-09"}], "childrenCount": 2 } """
 
   val children: List[String] = List(
-    """ { "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09 21:00:00"} """,
-    """ { "parentId": "A16", "name": "Josh Gumble", "birthDate": "1999-05-09 21:00:00"} """
+    """ { "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"} """,
+    """ { "parentId": "A16", "name": "Josh Gumble", "birthDate": "1999-05-09"} """
   )
 
   "Bulk index valid json without id key and suffix key" should "work" in {
@@ -154,6 +188,7 @@ trait ElasticClientSpec
     implicit val bulkOptions: BulkOptions = BulkOptions("person2", "person", 1000)
     val indices = pClient.bulk[String](persons.iterator, identity, Some("uuid"), None, None)
     refresh(indices)
+    pClient.flush("person2")
 
     indices should contain only "person2"
 
@@ -290,6 +325,11 @@ trait ElasticClientSpec
 
     import scala.collection.immutable.Seq
 
+    pClient
+      .count(JSONQuery("{}", Seq[String]("person6"), Seq[String]()))
+      .getOrElse(0d)
+      .toInt should ===(3)
+
     pClient.countAsync(JSONQuery("{}", Seq[String]("person6"), Seq[String]())) complete () match {
       case Success(s) => s.getOrElse(0d).toInt should ===(3)
       case Failure(f) => fail(f.getMessage)
@@ -309,12 +349,20 @@ trait ElasticClientSpec
 
     "person7" should haveCount(3)
 
+    val r1 = pClient.search[Person]("select * from person7")
+    r1.size should ===(3)
+    r1.map(_.uuid) should contain allOf ("A12", "A14", "A16")
+
     pClient.searchAsync[Person]("select * from person7") onComplete {
       case Success(r) =>
         r.size should ===(3)
         r.map(_.uuid) should contain allOf ("A12", "A14", "A16")
       case Failure(f) => fail(f.getMessage)
     }
+
+    val r2 = pClient.search[Person]("select * from person7 where _id=\"A16\"")
+    r2.size should ===(1)
+    r2.map(_.uuid) should contain("A16")
 
     pClient.searchAsync[Person](SQLQuery("select * from person7 where _id=\"A16\"")) onComplete {
       case Success(r) =>
@@ -361,6 +409,12 @@ trait ElasticClientSpec
     response.isDefined shouldBe true
     response.get.uuid shouldBe "A16"
 
+    pClient.getAsync[Person]("A16", Some("person9")) complete () match {
+      case Success(r) =>
+        r.isDefined shouldBe true
+        r.get.uuid shouldBe "A16"
+      case Failure(f) => fail(f.getMessage)
+    }
   }
 
   "Index" should "work" in {
@@ -368,6 +422,11 @@ trait ElasticClientSpec
     val sample = Sample(uuid)
     val result = sClient.index(sample)
     result shouldBe true
+
+    sClient.indexAsync(sample) complete () match {
+      case Success(r) => r shouldBe true
+      case Failure(f) => fail(f.getMessage)
+    }
 
     val result2 = sClient.get[Sample](uuid)
     result2 match {
@@ -383,6 +442,11 @@ trait ElasticClientSpec
     val sample = Sample(uuid)
     val result = sClient.update(sample)
     result shouldBe true
+
+    sClient.updateAsync(sample) complete () match {
+      case Success(r) => r shouldBe true
+      case Failure(f) => fail(f.getMessage)
+    }
 
     val result2 = sClient.get[Sample](uuid)
     result2 match {
@@ -402,6 +466,11 @@ trait ElasticClientSpec
     val result2 = sClient.delete(sample.uuid, Some("sample"))
     result2 shouldBe true
 
+    sClient.deleteAsync(sample.uuid, Some("sample")) complete () match {
+      case Success(r) => r shouldBe true
+      case Failure(f) => fail(f.getMessage)
+    }
+
     val result3 = sClient.get[Sample](uuid)
     result3.isEmpty shouldBe true
   }
@@ -410,27 +479,30 @@ trait ElasticClientSpec
     bClient.createIndex("binaries") shouldBe true
     val mapping =
       """{
-        |    "properties": {
-        |      "uuid": {
-        |        "type": "keyword",
-        |        "index": true
-        |      },
-        |      "createdDate": {
-        |        "type": "date"
-        |      },
-        |      "lastUpdated": {
-        |        "type": "date"
-        |      },
-        |      "content": {
-        |        "type": "binary"
-        |      },
-        |      "md5": {
-        |        "type": "keyword"
-        |      }
+        |  "properties": {
+        |    "lastUpdated": {
+        |      "type": "date"
+        |    },
+        |    "createdDate": {
+        |      "type": "date"
+        |    },
+        |    "uuid": {
+        |      "type": "keyword"
+        |    },
+        |    "content": {
+        |      "type": "binary"
+        |    },
+        |    "md5": {
+        |      "type": "keyword"
         |    }
+        |  }
         |}
-      """.stripMargin
+      """.stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    logger.info(s"mapping: $mapping")
     bClient.setMapping("binaries", mapping) shouldBe true
+    val mappings = bClient.getMapping("binaries")
+    logger.info(s"mappings: $mappings")
+    assert("{\"binaries\":{\"mappings\":" + mapping + "}}" == mappings)
     for (uuid <- Seq("png", "jpg", "pdf")) {
       val path =
         Paths.get(Thread.currentThread().getContextClassLoader.getResource(s"avatar.$uuid").getPath)
@@ -455,5 +527,106 @@ trait ElasticClientSpec
         case _ => fail("no result found for \"" + uuid + "\"")
       }
     }
+  }
+
+  "Aggregations" should "work" in {
+    pClient.createIndex("person10") shouldBe true
+    val mapping =
+      """{
+        |  "properties": {
+        |    "birthDate": {
+        |      "type": "date"
+        |    },
+        |    "uuid": {
+        |      "type": "keyword"
+        |    },
+        |    "name": {
+        |      "type": "keyword"
+        |    },
+        |    "children": {
+        |      "type": "nested",
+        |      "include_in_parent": true,
+        |      "properties": {
+        |        "name": {
+        |          "type": "keyword"
+        |        },
+        |        "birthDate": {
+        |          "type": "date"
+        |        }
+        |      }
+        |    },
+        |    "childrenCount": {
+        |      "type": "integer"
+        |    }
+        |  }
+        |}
+      """.stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    logger.info(s"mapping: $mapping")
+    pClient.setMapping("person10", mapping) shouldBe true
+
+    implicit val bulkOptions: BulkOptions = BulkOptions("person10", "person", 1000)
+    val indices =
+      pClient
+        .bulk[String](personsWithUpsert.iterator, identity, Some("uuid"), None, None, Some(true))
+    refresh(indices)
+    pClient.flush("person10")
+
+    indices should contain only "person10"
+
+    blockUntilCount(3, "person10")
+
+    "person10" should haveCount(3)
+
+    pClient.get[Person]("A16", Some("person10")) match {
+      case Some(p) =>
+        p.uuid shouldBe "A16"
+        p.birthDate shouldBe "1969-05-09"
+      case None => fail("Person A16 not found")
+    }
+
+    // test distinct count aggregation
+    pClient.aggregate(
+      SQLQuery("select count(distinct p.uuid) as c from person10 p")
+    ) complete () match {
+      case Success(s) => s.headOption.flatMap(_.asDoubleOption).getOrElse(0d) should ===(3d)
+      case Failure(f) => fail(f.getMessage)
+    }
+
+    // test count aggregation
+    pClient.aggregate(SQLQuery("select count(p.uuid) as c from person10 p")) complete () match {
+      case Success(s) => s.headOption.flatMap(_.asDoubleOption).getOrElse(0d) should ===(3d)
+      case Failure(f) => fail(f.getMessage)
+    }
+
+    // test max aggregation on date field
+    pClient.aggregate(SQLQuery("select max(p.birthDate) as c from person10 p")) complete () match {
+      case Success(s) =>
+        s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1969-05-09T00:00:00.000Z")
+      case Failure(f) => fail(f.getMessage)
+    }
+
+    // test min aggregation on date field
+    pClient.aggregate(SQLQuery("select min(p.birthDate) as c from person10 p")) complete () match {
+      case Success(s) =>
+        s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1967-11-21T00:00:00.000Z")
+      case Failure(f) => fail(f.getMessage)
+    }
+
+    // test avg aggregation on date field
+    pClient.aggregate(SQLQuery("select avg(p.birthDate) as c from person10 p")) complete () match {
+      case Success(s) =>
+        s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1968-05-17T08:00:00.000Z")
+      case Failure(f) => fail(f.getMessage)
+    }
+
+    // test sum aggregation on integer field
+    pClient.aggregate(
+      SQLQuery("select sum(p.childrenCount) as c from person10 p")
+    ) complete () match {
+      case Success(s) =>
+        s.headOption.flatMap(_.asDoubleOption).getOrElse(0d) should ===(2d)
+      case Failure(f) => fail(f.getMessage)
+    }
+
   }
 }

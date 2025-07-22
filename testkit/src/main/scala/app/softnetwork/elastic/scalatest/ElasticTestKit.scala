@@ -14,7 +14,7 @@ import org.scalatest.{BeforeAndAfterAll, Suite}
 import org.scalatest.matchers.{MatchResult, Matcher}
 import org.slf4j.Logger
 
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 /** Created by smanciot on 18/05/2021.
   */
@@ -183,6 +183,24 @@ trait ElasticTestKit extends ElasticDsl with CompletionTestKit with BeforeAndAft
       case Success(s) => s.result.isExists
       case _          => false
     }
+  }
+
+  def isIndexOpened(name: String): Boolean = {
+    elasticClient
+      .execute {
+        indexStats(name)
+      } complete () match {
+      case Success(s) =>
+        Try(s.result.indices.contains(name)) match {
+          case Success(_) => true
+          case Failure(_) => false
+        }
+      case _ => false
+    }
+  }
+
+  def isIndexClosed(name: String): Boolean = {
+    doesIndexExists(name) && !isIndexOpened(name)
   }
 
   def doesAliasExists(name: String): Boolean = {

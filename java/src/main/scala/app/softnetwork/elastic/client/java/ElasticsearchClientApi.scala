@@ -28,8 +28,10 @@ import com.google.gson.JsonParser
 
 import _root_.java.io.StringReader
 import _root_.java.util.{Map => JMap}
-
-import scala.collection.JavaConverters.{collectionAsScalaIterableConverter, seqAsJavaListConverter}
+import scala.collection.JavaConverters.{
+  collectionAsScalaIterableConverter,
+  seqAsJavaListConverter
+}
 import org.json4s.Formats
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -128,12 +130,13 @@ trait ElasticsearchClientSettingsApi extends SettingsApi with ElasticsearchClien
   }
 
   override def loadSettings(): String = {
-    apply()
+    val settings = apply()
       .indices()
       .getSettings(
         new GetIndicesSettingsRequest.Builder().index("*").build()
       )
       .toString
+    settings.substring(settings.indexOf(':') + 1).trim
   }
 }
 
@@ -148,12 +151,13 @@ trait ElasticsearchClientMappingApi extends MappingApi with ElasticsearchClientC
   }
 
   override def getMapping(index: String): String = {
-    apply()
+    val mapping = apply()
       .indices()
       .getMapping(
         new GetMappingRequest.Builder().index(index).build()
       )
       .toString
+    mapping.substring(mapping.indexOf(':') + 1).trim
   }
 }
 
@@ -194,11 +198,26 @@ trait ElasticsearchClientCountApi extends CountApi with ElasticsearchClientCompa
         .toDouble
     )
   }
+
+  override def countAsync(query: client.JSONQuery)(implicit
+    ec: ExecutionContext
+  ): Future[Option[Double]] = {
+    fromCompletableFuture(
+      async()
+        .count(
+          new CountRequest.Builder().index(query.indices.asJava).build()
+        )
+    ).map(response => Option(response.count().toDouble))
+  }
 }
 
 trait ElasticsearchClientSingleValueAggregateApi
     extends SingleValueAggregateApi
     with ElasticsearchClientCountApi {
+  private[this] def aggregateValue(value: Double, valueAsString: String): AggregateValue =
+    if (valueAsString.nonEmpty) StringValue(valueAsString)
+    else NumericValue(value)
+
   override def aggregate(
     sqlQuery: SQLQuery
   )(implicit ec: ExecutionContext): Future[Seq[SingleValueAggregateResult]] = {
@@ -224,13 +243,15 @@ trait ElasticsearchClientSingleValueAggregateApi
                 SingleValueAggregateResult(
                   field,
                   aggType,
-                  result.getOrElse(0d),
+                  NumericValue(result.getOrElse(0d)),
                   None
                 )
               )
             case Failure(f) =>
               logger.error(f.getMessage, f.fillInStackTrace())
-              promise.success(SingleValueAggregateResult(field, aggType, 0d, Some(f.getMessage)))
+              promise.success(
+                SingleValueAggregateResult(field, aggType, EmptyValue, Some(f.getMessage))
+              )
           }
           promise.future
         case _ =>
@@ -240,6 +261,9 @@ trait ElasticsearchClientSingleValueAggregateApi
             collection.immutable.Seq.empty[String]
           )
           import jsonQuery._
+          logger.info(
+            s"Aggregating with query: ${jsonQuery.query} on indices: ${indices.mkString(", ")}"
+          )
           // Create a parser for the query
           Try(
             apply().search(
@@ -252,6 +276,9 @@ trait ElasticsearchClientSingleValueAggregateApi
             )
           ) match {
             case Success(response) =>
+              logger.whenDebugEnabled(
+                s"Aggregation response: ${response.toString}"
+              )
               val agg = aggName.split("\\.").last
 
               val itAgg = aggName.split("\\.").iterator
@@ -273,20 +300,25 @@ trait ElasticsearchClientSingleValueAggregateApi
                   aggType,
                   aggType match {
                     case sql.Count =>
-                      if (aggregation.distinct) {
-                        root.get(agg).cardinality().value()
-                      } else {
-                        root.get(agg).valueCount().value()
-                      }
+                      NumericValue(
+                        if (aggregation.distinct) {
+                          root.get(agg).cardinality().value()
+                        } else {
+                          root.get(agg).valueCount().value()
+                        }
+                      )
                     case sql.Sum =>
-                      root.get(agg).sum().value()
+                      NumericValue(root.get(agg).sum().value())
                     case sql.Avg =>
-                      root.get(agg).avg().value()
+                      val avgAgg = root.get(agg).avg()
+                      aggregateValue(avgAgg.value(), avgAgg.valueAsString())
                     case sql.Min =>
-                      root.get(agg).min().value()
+                      val minAgg = root.get(agg).min()
+                      aggregateValue(minAgg.value(), minAgg.valueAsString())
                     case sql.Max =>
-                      root.get(agg).max().value()
-                    case _ => 0d
+                      val maxAgg = root.get(agg).max()
+                      aggregateValue(maxAgg.value(), maxAgg.valueAsString())
+                    case _ => EmptyValue
                   },
                   None
                 )
@@ -297,7 +329,7 @@ trait ElasticsearchClientSingleValueAggregateApi
                 SingleValueAggregateResult(
                   field,
                   aggType,
-                  0d,
+                  EmptyValue,
                   Some(exception.getMessage)
                 )
               )

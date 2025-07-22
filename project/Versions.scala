@@ -28,7 +28,7 @@ object Versions {
 
   val testContainers = "1.18.0"
 
-  val genericPersistence = "0.7.1"
+  val genericPersistence = "0.7.3"
 
   val gson = "2.8.0"
 

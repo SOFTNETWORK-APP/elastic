@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
   push:
     branches: 
-      - 'main'
+      - 'v8.x'
 #      - '*'         # matches every branch that doesn't contain a '/'
 #      - '*/*'       # matches every branch containing a single '/'
 #      - '**'        # matches every branch
@@ -27,6 +27,12 @@ jobs:
       JAVA_OPTS: -Xms2048M -Xmx2048M -Xss6M -XX:ReservedCodeCacheSize=256M -Dfile.encoding=UTF-8
       JVM_OPTS:  -Xms2048M -Xmx2048M -Xss6M -XX:ReservedCodeCacheSize=256M -Dfile.encoding=UTF-8
     steps:
+    - name: Env
+      run: |
+        echo "JFROG_USER=${{ secrets.JFROG_USER }}" >>  $GITHUB_ENV
+        echo "JFROG_PASSWORD=${{ secrets.JFROG_PASSWORD }}" >>  $GITHUB_ENV
+        echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >>  $GITHUB_ENV
+        echo "CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }}" >>  $GITHUB_ENV
     - name: Checkout
       uses: actions/checkout@v3
     - name: Set up JDK 8
@@ -39,16 +45,14 @@ jobs:
       uses: sbt/setup-sbt@v1
     - name: Formatting
       run: sbt scalafmtSbtCheck scalafmtCheck test:scalafmtCheck
-    - name: Set vm.max_map_count
-      run: sudo sysctl -w vm.max_map_count=262144
     - name: Run tests & Coverage Report
-      run: sbt coverage test coverageReport coverageAggregate
+      run: SBT_OPTS="-Xss4M -Xms1g -Xmx4g -Dfile.encoding=UTF-8" sbt coverage test coverageReport coverageAggregate
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
-        files: sql/target/scala-2.12/coverage-report/cobertura.xml,client/testkit/target/scala-2.12/coverage-report/cobertura.xml,persistence/target/scala-2.12/coverage-report/cobertura.xml,teskit/target/scala-2.12/coverage-report/cobertura.xml
+        files: sql/target/scala-2.12/coverage-report/cobertura.xml,client/testkit/target/scala-2.12/coverage-report/cobertura.xml,persistence/target/scala-2.12/coverage-report/cobertura.xml,jest/target/scala-2.12/coverage-report/cobertura.xml,rest/target/scala-2.12/coverage-report/cobertura.xml,teskit/target/scala-2.12/coverage-report/cobertura.xml
         flags: unittests
         fail_ci_if_error: false
         verbose: true
     - name: Publish
-      run: sbt publish
+      run: SBT_OPTS="-Xss4M -Xms1g -Xmx4g -Dfile.encoding=UTF-8" sbt publish
