@@ -30,6 +30,12 @@ jobs:
       JAVA_OPTS: -Xms2048M -Xmx2048M -Xss6M -XX:ReservedCodeCacheSize=256M -Dfile.encoding=UTF-8
       JVM_OPTS:  -Xms2048M -Xmx2048M -Xss6M -XX:ReservedCodeCacheSize=256M -Dfile.encoding=UTF-8
     steps:
+    - name: Env
+      run: |
+        echo "JFROG_USER=${{ secrets.JFROG_USER }}" >>  $GITHUB_ENV
+        echo "JFROG_PASSWORD=${{ secrets.JFROG_PASSWORD }}" >>  $GITHUB_ENV
+        echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >>  $GITHUB_ENV
+        echo "CODECOV_TOKEN=${{ secrets.CODECOV_TOKEN }}" >>  $GITHUB_ENV
     - name: Checkout
       uses: actions/checkout@v3
     - name: Set up JDK 17
@@ -43,7 +49,7 @@ jobs:
     - name: Set vm.max_map_count
       run: sudo sysctl -w vm.max_map_count=262144
     - name: Run tests
-      run: sbt test
+      run: SBT_OPTS="-Xss4M -Xms1g -Xmx4g -Dfile.encoding=UTF-8" sbt test
 
   lint:
     runs-on: ubuntu-latest
