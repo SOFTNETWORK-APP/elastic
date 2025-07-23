@@ -2,7 +2,7 @@ package app.softnetwork.elastic.scalatest
 
 import org.scalatest.Suite
 import org.testcontainers.containers.BindMode
-import org.testcontainers.containers.wait.strategy.Wait
+//import org.testcontainers.containers.wait.strategy.Wait
 import org.testcontainers.elasticsearch.ElasticsearchContainer
 import org.testcontainers.utility.DockerImageName
 
