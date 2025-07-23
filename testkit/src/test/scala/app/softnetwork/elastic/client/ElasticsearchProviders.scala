@@ -1,7 +1,7 @@
 package app.softnetwork.elastic.client
 
 import app.softnetwork.elastic.client.java.ElasticsearchClientProvider
-import app.softnetwork.elastic.model.{Binary, Sample}
+import app.softnetwork.elastic.model.{Binary, Parent, Sample}
 import app.softnetwork.persistence.ManifestWrapper
 import app.softnetwork.persistence.person.model.Person
 import co.elastic.clients.elasticsearch.ElasticsearchClient
@@ -16,7 +16,7 @@ object ElasticsearchProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val restHighLevelClient: ElasticsearchClient = apply()
+    implicit lazy val elasticsearchClient: ElasticsearchClient = apply()
   }
 
   class SampleProvider(es: Config)
@@ -26,7 +26,7 @@ object ElasticsearchProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val restHighLevelClient: ElasticsearchClient = apply()
+    implicit lazy val elasticsearchClient: ElasticsearchClient = apply()
   }
 
   class BinaryProvider(es: Config)
@@ -36,6 +36,16 @@ object ElasticsearchProviders {
 
     override lazy val config: Config = es
 
-    implicit lazy val restHighLevelClient: ElasticsearchClient = apply()
+    implicit lazy val elasticsearchClient: ElasticsearchClient = apply()
+  }
+
+  class ParentProvider(es: Config)
+      extends ElasticsearchClientProvider[Parent]
+      with ManifestWrapper[Parent] {
+    override protected val manifestWrapper: ManifestW = ManifestW()
+
+    override lazy val config: Config = es
+
+    implicit lazy val elasticsearchClient: ElasticsearchClient = apply()
   }
 }

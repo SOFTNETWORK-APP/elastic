@@ -21,7 +21,7 @@ import co.elastic.clients.elasticsearch.core._
 import co.elastic.clients.elasticsearch.core.search.SearchRequestBody
 import co.elastic.clients.elasticsearch.indices.update_aliases.{Action, AddAction, RemoveAction}
 import co.elastic.clients.elasticsearch.indices._
-import com.google.gson.JsonParser
+import com.google.gson.{Gson, JsonParser}
 
 import _root_.java.io.StringReader
 import _root_.java.util.{Map => JMap}
@@ -129,8 +129,7 @@ trait ElasticsearchClientSettingsApi extends SettingsApi with ElasticsearchClien
       .getSettings(
         new GetIndicesSettingsRequest.Builder().index("*").build()
       )
-      .toString
-    settings.substring(settings.indexOf(':') + 1).trim
+    extractSource(settings).getOrElse("")
   }
 }
 
@@ -150,8 +149,7 @@ trait ElasticsearchClientMappingApi extends MappingApi with ElasticsearchClientC
       .getMapping(
         new GetMappingRequest.Builder().index(index).build()
       )
-      .toString
-    mapping.substring(mapping.indexOf(':') + 1).trim
+    extractSource(mapping).getOrElse("")
   }
 }
 
@@ -477,7 +475,7 @@ trait ElasticsearchClientGetApi extends GetApi with ElasticsearchClientCompanion
       case Success(response) =>
         if (response.found()) {
           val source = mapper.writeValueAsString(response.source())
-          logger.info(s"Deserializing response $source for id: $id, index: ${index
+          logger.whenDebugEnabled(s"Deserializing response $source for id: $id, index: ${index
             .getOrElse("default")}, type: ${maybeType.getOrElse("_all")}")
           // Deserialize the source string to the expected type
           // Note: This assumes that the source is a valid JSON representation of U
@@ -528,7 +526,7 @@ trait ElasticsearchClientGetApi extends GetApi with ElasticsearchClientCompanion
     ).flatMap {
       case response if response.found() =>
         val source = mapper.writeValueAsString(response.source())
-        logger.info(s"Deserializing response $source for id: $id, index: ${index
+        logger.whenDebugEnabled(s"Deserializing response $source for id: $id, index: ${index
           .getOrElse("default")}, type: ${maybeType.getOrElse("_all")}")
         // Deserialize the source string to the expected type
         // Note: This assumes that the source is a valid JSON representation of U
@@ -571,26 +569,19 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
         .hits()
         .hits()
         .asScala
-        .map { hit =>
+        .flatMap { hit =>
           val source = mapper.writeValueAsString(hit.source())
-          logger.info(s"Deserializing hit: $source")
-          serialization.read[U](source)
+          logger.whenDebugEnabled(s"Deserializing hit: $source")
+          Try(serialization.read[U](source)).toOption.orElse {
+            logger.error(
+              s"Failed to deserialize hit: $source"
+            )
+            None
+          }
         }
         .toList
     } else {
       List.empty[U]
-    }
-  }
-
-  override def search[U](sqlQuery: SQLQuery)(implicit m: Manifest[U], formats: Formats): List[U] = {
-    sqlQuery.search match {
-      case Some(searchRequest) =>
-        val indices = collection.immutable.Seq(searchRequest.sources: _*)
-        search[U](JSONQuery(searchRequest.query, indices))
-      case None =>
-        throw new IllegalArgumentException(
-          s"SQL query ${sqlQuery.query} does not contain a valid search request"
-        )
     }
   }
 
@@ -618,7 +609,7 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
                 .asScala
                 .map { hit =>
                   val source = mapper.writeValueAsString(hit.source())
-                  logger.info(s"Deserializing hit: $source")
+                  logger.whenDebugEnabled(s"Deserializing hit: $source")
                   serialization.read[U](source)
                 }
                 .toList
@@ -644,20 +635,70 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
     formats: Formats
   ): List[(U, List[I])] = {
     import jsonQuery._
-    val response = apply().search(
-      new SearchRequest.Builder()
-        .index(indices.asJava)
-        .withJson(
-          new StringReader(query)
-        )
-        .build(),
-      classOf[JMap[String, Object]]
-    )
-    Try(new JsonParser().parse(response.toString).getAsJsonObject ~> [U, I] innerField) match {
-      case Success(s) => s
-      case Failure(f) =>
-        logger.error(f.getMessage, f)
-        List.empty
+    logger.info(s"Searching with query: $query on indices: ${indices.mkString(", ")}")
+    val response = apply()
+      .search(
+        new SearchRequest.Builder()
+          .index(indices.asJava)
+          .withJson(
+            new StringReader(query)
+          )
+          .build(),
+        classOf[JMap[String, Object]]
+      )
+    val results = response
+      .hits()
+      .hits()
+      .asScala
+      .toList
+    if (results.nonEmpty) {
+      results.flatMap { hit =>
+        val hitSource = hit.source()
+        Option(hitSource)
+          .map(mapper.writeValueAsString)
+          .flatMap { source =>
+            logger.whenDebugEnabled(s"Deserializing hit: $source")
+            Try(serialization.read[U](source)) match {
+              case Success(mainObject) =>
+                Some(mainObject)
+              case Failure(f) =>
+                logger.error(
+                  s"Failed to deserialize hit: $source for query: $query on indices: ${indices.mkString(", ")}",
+                  f
+                )
+                None
+            }
+          }
+          .map { mainObject =>
+            val innerHits = hit
+              .innerHits()
+              .asScala
+              .get(innerField)
+              .map(_.hits().hits().asScala.toList)
+              .getOrElse(Nil)
+            val innerObjects = innerHits.flatMap { innerHit =>
+              extractSource(innerHit) match {
+                case Some(innerSource) =>
+                  logger.whenDebugEnabled(s"Processing inner hit: $innerSource")
+                  val json = new JsonParser().parse(innerSource).getAsJsonObject
+                  val gson = new Gson()
+                  Try(serialization.read[I](gson.toJson(json.get("_source")))) match {
+                    case Success(innerObject) => Some(innerObject)
+                    case Failure(f) =>
+                      logger.error(s"Failed to deserialize inner hit: $innerSource", f)
+                      None
+                  }
+                case None =>
+                  logger.warn("Could not extract inner hit source from string representation")
+                  None
+              }
+            }
+            (mainObject, innerObjects)
+          }
+      }
+    } else {
+      logger.warn(s"No hits found for query: $query on indices: ${indices.mkString(", ")}")
+      List.empty[(U, List[I])]
     }
   }
 
