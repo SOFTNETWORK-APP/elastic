@@ -4,7 +4,7 @@ import com.google.gson._
 import com.typesafe.scalalogging.StrictLogging
 
 import scala.collection.JavaConverters._
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 object MappingComparator extends StrictLogging {
 
@@ -22,8 +22,12 @@ object MappingComparator extends StrictLogging {
           entry.getKey -> entry.getValue
         }
         .toMap
-    ).toOption
-      .getOrElse(Map.empty[String, JsonElement])
+    ) match {
+      case Success(jsonMap) => jsonMap
+      case Failure(f) =>
+        logger.error(s"Failed to parse JSON mapping $jsonString: ${f.getMessage}", f)
+        Map.empty[String, JsonElement]
+    }
   }
 
   private def compareJsonMappings(

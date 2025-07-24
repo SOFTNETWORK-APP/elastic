@@ -133,10 +133,12 @@ trait IndicesApi {
     *   - the name of the source index
     * @param targetIndex
     *   - the name of the target index
+    * @param refresh
+    *   - true to refresh the target index after reindexing, false otherwise
     * @return
     *   true if the reindexing was successful, false otherwise
     */
-  def reindex(sourceIndex: String, targetIndex: String): Boolean
+  def reindex(sourceIndex: String, targetIndex: String, refresh: Boolean = true): Boolean
 
   /** Check if an index exists.
     * @param index
@@ -211,10 +213,12 @@ trait SettingsApi { _: IndicesApi =>
   def updateSettings(index: String, settings: String = defaultSettings): Boolean
 
   /** Load the settings of an index.
+    * @param index
+    *   - the name of the index to load the settings for (default is None, which means all indices)
     * @return
     *   the settings of the index as a JSON string
     */
-  def loadSettings(): String
+  def loadSettings(index: Option[String] = None): String
 }
 
 trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
@@ -311,11 +315,6 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
         return false
       }
       logger.info(s"Mapping for index $index set successfully.")
-      if (!this.refresh(index)) {
-        logger.error(s"Failed to refresh index: $index")
-        return false
-      }
-      logger.info(s"Index $index refreshed successfully.")
       true
     }
     // Check if the mapping needs to be updated
@@ -347,12 +346,6 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
           logger.info(
             s"Reindexing from original index $index to temporary index $tempIndex completed successfully."
           )
-          // Refresh the temporary index to make sure all documents are indexed
-          if (!this.refresh(tempIndex)) {
-            logger.error(s"Failed to refresh temporary index: $tempIndex")
-            return false
-          }
-          logger.info(s"Temporary index $tempIndex refreshed successfully.")
           // Close the original index
           this.closeIndex(index)
           // Delete the original index
@@ -379,11 +372,6 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
             logger.info(
               s"Reindexing from temporary index $tempIndex to original index $index completed successfully."
             )
-            if (!this.refresh(index)) {
-              logger.error(s"Failed to refresh original index: $index")
-              return false
-            }
-            logger.info(s"Original index $index refreshed successfully.")
             if (!this.openIndex(index)) {
               logger.error(s"Failed to open original index: $index")
               return false

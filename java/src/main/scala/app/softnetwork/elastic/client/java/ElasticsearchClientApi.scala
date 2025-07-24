@@ -78,16 +78,28 @@ trait ElasticsearchClientIndicesApi extends IndicesApi with ElasticsearchClientC
     apply().indices().close(new CloseIndexRequest.Builder().index(index).build()).acknowledged()
   }
 
-  override def reindex(sourceIndex: String, targetIndex: String): Boolean = {
-    apply()
+  override def reindex(
+    sourceIndex: String,
+    targetIndex: String,
+    refresh: Boolean = true
+  ): Boolean = {
+    val failures = apply()
       .reindex(
         new ReindexRequest.Builder()
           .source(new Source.Builder().index(sourceIndex).build())
           .dest(new Destination.Builder().index(targetIndex).build())
+          .refresh(refresh)
           .build()
       )
       .failures()
-      .isEmpty
+      .asScala
+      .map(_.cause().reason())
+    if (failures.nonEmpty) {
+      logger.error(
+        s"Reindexing from $sourceIndex to $targetIndex failed with errors: ${failures.take(100).mkString(", ")}"
+      )
+    }
+    failures.isEmpty
   }
 
   override def indexExists(index: String): Boolean = {
@@ -147,11 +159,11 @@ trait ElasticsearchClientSettingsApi extends SettingsApi with ElasticsearchClien
       .acknowledged()
   }
 
-  override def loadSettings(): String = {
+  override def loadSettings(index: Option[String] = None): String = {
     val settings = apply()
       .indices()
       .getSettings(
-        new GetIndicesSettingsRequest.Builder().index("*").build()
+        new GetIndicesSettingsRequest.Builder().index(index.getOrElse("*")).build()
       )
     extractSource(settings).getOrElse("")
   }

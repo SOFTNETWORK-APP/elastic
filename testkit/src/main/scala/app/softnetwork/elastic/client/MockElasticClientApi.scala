@@ -55,10 +55,13 @@ trait MockElasticClientApi extends ElasticClientApi {
     *   - the name of the source index
     * @param targetIndex
     *   - the name of the target index
+    * @param refresh
+    *   - true to refresh the target index after reindexing, false otherwise
     * @return
     *   true if the reindexing was successful, false otherwise
     */
-  override def reindex(sourceIndex: String, targetIndex: String): Boolean = true
+  override def reindex(sourceIndex: String, targetIndex: String, refresh: Boolean = true): Boolean =
+    true
 
   /** Check if an index exists.
     *
@@ -168,7 +171,8 @@ trait MockElasticClientApi extends ElasticClientApi {
   ): Future[Seq[SingleValueAggregateResult]] =
     throw new UnsupportedOperationException
 
-  override def loadSettings(): String = throw new UnsupportedOperationException
+  override def loadSettings(index: Option[String] = None): String =
+    throw new UnsupportedOperationException
 }
 
 trait ElasticDocuments {
