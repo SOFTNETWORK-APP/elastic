@@ -6,7 +6,10 @@ import app.softnetwork.elastic.persistence.query.ElasticProvider
 import app.softnetwork.persistence.ManifestWrapper
 import app.softnetwork.persistence.person.model.Person
 import app.softnetwork.persistence.person.query.PersonToExternalProcessorStream
-import app.softnetwork.persistence.query.{ExternalPersistenceProvider, PersonToElasticProcessorStream}
+import app.softnetwork.persistence.query.{
+  ExternalPersistenceProvider,
+  PersonToElasticProcessorStream
+}
 import com.typesafe.config.Config
 import org.slf4j.{Logger, LoggerFactory}
 
