@@ -42,9 +42,8 @@ trait ElasticProvider[T <: Timestamped] extends ExternalPersistenceProvider[T] w
 
   protected def initIndex(): Unit = {
     Try {
-      createIndex(index)
+      updateMapping(index, loadMapping(mappingPath))
       addAlias(index, alias)
-      setMapping(index, loadMapping(mappingPath))
     } match {
       case Success(_) => logger.info(s"index:$index type:${_type} alias:$alias created")
       case Failure(f) =>

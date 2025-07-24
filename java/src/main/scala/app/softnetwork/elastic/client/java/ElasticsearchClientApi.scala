@@ -22,17 +22,14 @@ import co.elastic.clients.elasticsearch.core.msearch.{
   RequestItem
 }
 import co.elastic.clients.elasticsearch.core._
+import co.elastic.clients.elasticsearch.core.reindex.{Destination, Source}
 import co.elastic.clients.elasticsearch.indices.update_aliases.{Action, AddAction, RemoveAction}
-import co.elastic.clients.elasticsearch.indices._
+import co.elastic.clients.elasticsearch.indices.{ExistsRequest => IndexExistsRequest, _}
 import com.google.gson.{Gson, JsonParser}
 
 import _root_.java.io.StringReader
 import _root_.java.util.{Map => JMap}
-import scala.collection.JavaConverters.{
-  collectionAsScalaIterableConverter,
-  mapAsScalaMapConverter,
-  seqAsJavaListConverter
-}
+import scala.collection.JavaConverters._
 import org.json4s.Formats
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -81,6 +78,25 @@ trait ElasticsearchClientIndicesApi extends IndicesApi with ElasticsearchClientC
     apply().indices().close(new CloseIndexRequest.Builder().index(index).build()).acknowledged()
   }
 
+  override def reindex(sourceIndex: String, targetIndex: String): Boolean = {
+    apply()
+      .reindex(
+        new ReindexRequest.Builder()
+          .source(new Source.Builder().index(sourceIndex).build())
+          .dest(new Destination.Builder().index(targetIndex).build())
+          .build()
+      )
+      .failures()
+      .isEmpty
+  }
+
+  override def indexExists(index: String): Boolean = {
+    apply()
+      .indices()
+      .exists(
+        new IndexExistsRequest.Builder().index(index).build()
+      ).value()
+  }
 }
 
 trait ElasticsearchClientAliasApi extends AliasApi with ElasticsearchClientCompanion {
@@ -140,7 +156,11 @@ trait ElasticsearchClientSettingsApi extends SettingsApi with ElasticsearchClien
   }
 }
 
-trait ElasticsearchClientMappingApi extends MappingApi with ElasticsearchClientCompanion {
+trait ElasticsearchClientMappingApi
+    extends MappingApi
+    with ElasticsearchClientIndicesApi
+    with ElasticsearchClientRefreshApi
+    with ElasticsearchClientCompanion {
   override def setMapping(index: String, mapping: String): Boolean = {
     apply()
       .indices()

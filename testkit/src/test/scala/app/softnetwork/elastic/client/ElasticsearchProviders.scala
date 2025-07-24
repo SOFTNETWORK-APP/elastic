@@ -1,7 +1,7 @@
 package app.softnetwork.elastic.client
 
-import app.softnetwork.elastic.client.java.ElasticsearchClientProvider
 import app.softnetwork.elastic.model.{Binary, Parent, Sample}
+import app.softnetwork.elastic.persistence.query.ElasticsearchClientProvider
 import app.softnetwork.persistence.ManifestWrapper
 import app.softnetwork.persistence.person.model.Person
 import co.elastic.clients.elasticsearch.ElasticsearchClient
