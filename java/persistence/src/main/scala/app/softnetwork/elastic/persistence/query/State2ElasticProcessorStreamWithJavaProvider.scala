@@ -1,6 +1,5 @@
 package app.softnetwork.elastic.persistence.query
 
-import app.softnetwork.elastic.client.java.ElasticsearchClientProvider
 import app.softnetwork.persistence.message.CrudEvent
 import app.softnetwork.persistence.model.Timestamped
 import app.softnetwork.persistence.query.{JournalProvider, OffsetProvider}

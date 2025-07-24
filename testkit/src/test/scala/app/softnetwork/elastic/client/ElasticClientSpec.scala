@@ -137,6 +137,93 @@ trait ElasticClientSpec
     settings.getOrElse("index.number_of_replicas", "") shouldBe "0"
   }
 
+  "Setting a mapping" should "work" in {
+    pClient.createIndex("person_mapping")
+    blockUntilIndexExists("person_mapping")
+    "person_mapping" should beCreated
+
+    val mapping =
+      """{
+        |  "properties": {
+        |    "birthDate": {
+        |      "type": "date"
+        |    },
+        |    "uuid": {
+        |      "type": "keyword"
+        |    },
+        |    "name": {
+        |      "type": "keyword"
+        |    }
+        |  }
+        |}
+      """.stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    pClient.setMapping("person_mapping", mapping) shouldBe true
+
+    val properties = pClient.getMappingProperties("person_mapping")
+    logger.info(s"properties: $properties")
+    MappingComparator.isMappingDifferent(
+      properties,
+      mapping
+    ) shouldBe false
+  }
+
+  "Updating a mapping" should "work" in {
+    val mapping =
+      """{
+        |  "properties": {
+        |    "name": {
+        |      "type": "keyword"
+        |    },
+        |    "birthDate": {
+        |      "type": "date"
+        |    },
+        |    "uuid": {
+        |      "type": "keyword"
+        |    },
+        |    "childrenCount": {
+        |      "type": "integer"
+        |    }
+        |  }
+        |}
+      """.stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    pClient.updateMapping("person_migration", mapping) shouldBe true
+    blockUntilIndexExists("person_migration")
+    "person_migration" should beCreated
+
+    val newMapping =
+      """{
+        |  "properties": {
+        |    "birthDate": {
+        |      "type": "date"
+        |    },
+        |    "uuid": {
+        |      "type": "keyword"
+        |    },
+        |    "name": {
+        |      "type": "keyword"
+        |    },
+        |    "childrenCount": {
+        |      "type": "integer"
+        |    },
+        |    "children": {
+        |      "type": "nested",
+        |      "include_in_parent": true,
+        |      "properties": {
+        |        "name": {
+        |          "type": "keyword"
+        |        },
+        |        "birthDate": {
+        |          "type": "date"
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    pClient.shouldUpdateMapping("person_migration", newMapping) shouldBe true
+    pClient.updateMapping("person_migration", newMapping) shouldBe true
+  }
+
   val persons: List[String] = List(
     """ { "uuid": "A12", "name": "Homer Simpson", "birthDate": "1967-11-21", "childrenCount": 0} """,
     """ { "uuid": "A14", "name": "Moe Szyslak",   "birthDate": "1967-11-21", "childrenCount": 0} """,
