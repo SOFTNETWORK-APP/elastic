@@ -95,7 +95,8 @@ trait ElasticsearchClientIndicesApi extends IndicesApi with ElasticsearchClientC
       .indices()
       .exists(
         new IndexExistsRequest.Builder().index(index).build()
-      ).value()
+      )
+      .value()
   }
 }
 
