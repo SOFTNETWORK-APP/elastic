@@ -107,13 +107,7 @@ trait ElasticClientSpec
   "Toggle refresh" should "work" in {
     pClient.toggleRefresh("person", enable = false)
     new JsonParser()
-      .parse(pClient.loadSettings())
-      .getAsJsonObject
-      .get("person")
-      .getAsJsonObject
-      .get("settings")
-      .getAsJsonObject
-      .get("index")
+      .parse(pClient.loadSettings("person"))
       .getAsJsonObject
       .get("refresh_interval")
       .getAsString shouldBe "-1"
@@ -122,13 +116,7 @@ trait ElasticClientSpec
     pClient.toggleRefresh("person", enable = true)
 //    settings.getOrElse("index.refresh_interval", "") shouldBe "1s"
     new JsonParser()
-      .parse(pClient.loadSettings())
-      .getAsJsonObject
-      .get("person")
-      .getAsJsonObject
-      .get("settings")
-      .getAsJsonObject
-      .get("index")
+      .parse(pClient.loadSettings("person"))
       .getAsJsonObject
       .get("refresh_interval")
       .getAsString shouldBe "1s"
@@ -671,7 +659,7 @@ trait ElasticClientSpec
     bClient.setMapping("binaries", mapping) shouldBe true
     val mappings = bClient.getMapping("binaries")
     logger.info(s"mappings: $mappings")
-    assert("{\"binaries\":{\"mappings\":" + mapping + "}}" == mappings)
+    assert("{\"mappings\":" + mapping + "}" == mappings)
     for (uuid <- Seq("png", "jpg", "pdf")) {
       val path =
         Paths.get(Thread.currentThread().getContextClassLoader.getResource(s"avatar.$uuid").getPath)

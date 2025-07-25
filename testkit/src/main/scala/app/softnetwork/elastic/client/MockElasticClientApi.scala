@@ -171,7 +171,7 @@ trait MockElasticClientApi extends ElasticClientApi {
   ): Future[Seq[SingleValueAggregateResult]] =
     throw new UnsupportedOperationException
 
-  override def loadSettings(index: Option[String] = None): String =
+  override def loadSettings(index: String): String =
     throw new UnsupportedOperationException
 }
 

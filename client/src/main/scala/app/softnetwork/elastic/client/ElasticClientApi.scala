@@ -214,11 +214,11 @@ trait SettingsApi { _: IndicesApi =>
 
   /** Load the settings of an index.
     * @param index
-    *   - the name of the index to load the settings for (default is None, which means all indices)
+    *   - the name of the index to load the settings for
     * @return
     *   the settings of the index as a JSON string
     */
-  def loadSettings(index: Option[String] = None): String
+  def loadSettings(index: String): String
 }
 
 trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
@@ -261,14 +261,12 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
       new JsonParser()
         .parse(mapping)
         .getAsJsonObject
-        .get(index)
-        .getAsJsonObject
         .get("mappings")
         .toString
     ) match {
       case Success(properties) => properties
       case Failure(exception) =>
-        logger.error(s"Failed to get mapping properties for index $index", exception)
+        logger.error(s"Failed to parse mapping properties for index $index and $mapping", exception)
         "{\"properties\": {}}" // Return an empty properties object in case of failure
     }
   }
@@ -304,13 +302,13 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
     settings: String = defaultSettings
   ): Boolean = {
     // Check if the index exists
-    if (!this.indexExists(index)) {
-      if (!this.createIndex(index, settings)) {
+    if (!tryOrElse(this.indexExists(index), false)(logger)) {
+      if (!tryOrElse(this.createIndex(index, settings), false)(logger)) {
         logger.error(s"Failed to create index: $index")
         return false
       }
       logger.info(s"Index $index created successfully.")
-      if (!this.setMapping(index, mapping)) {
+      if (!tryOrElse(this.setMapping(index, mapping), false)(logger)) {
         logger.error(s"Failed to set mapping for index: $index")
         return false
       }
@@ -327,17 +325,17 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
       logger.info("Temporary index: " + tempIndex)
       def migrate(): Boolean = {
         // Create a temporary index with the new mapping
-        tempCreated = this.createIndex(tempIndex, settings)
+        tempCreated = tryOrElse(this.createIndex(tempIndex, settings), false)(logger)
         if (tempCreated) {
           logger.info(s"Temporary index $tempIndex created successfully.")
           // Set the new mapping on the temporary index
-          if (!this.setMapping(tempIndex, mapping)) {
+          if (!tryOrElse(this.setMapping(tempIndex, mapping), false)(logger)) {
             logger.error(s"Failed to set mapping for temporary index: $tempIndex")
             return false
           }
           logger.info(s"Mapping for temporary index $tempIndex set successfully.")
           // Reindex from the original index to the temporary index
-          if (!this.reindex(index, tempIndex)) {
+          if (!tryOrElse(this.reindex(index, tempIndex), false)(logger)) {
             logger.error(
               s"Failed to reindex from original index: $index to temporary index: $tempIndex"
             )
@@ -346,24 +344,22 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
           logger.info(
             s"Reindexing from original index $index to temporary index $tempIndex completed successfully."
           )
-          // Close the original index
-          this.closeIndex(index)
           // Delete the original index
           originalDeleted = this.deleteIndex(index)
           if (originalDeleted) {
             logger.info(s"Original index $index deleted successfully.")
             // Rename the temporary index to the original index name
-            if (!this.createIndex(index, settings)) {
+            if (!tryOrElse(this.createIndex(index, settings), false)(logger)) {
               logger.error(s"Failed to recreate original index: $index")
               return false
             }
             logger.info(s"Original index $index recreated successfully.")
-            if (!this.setMapping(index, mapping)) {
+            if (!tryOrElse(this.setMapping(index, mapping), false)(logger)) {
               logger.error(s"Failed to set mapping for original index: $index")
               return false
             }
             logger.info(s"Mapping for original index $index set successfully.")
-            if (!this.reindex(tempIndex, index)) {
+            if (!tryOrElse(this.reindex(tempIndex, index), false)(logger)) {
               logger.error(
                 s"Failed to reindex from temporary index: $tempIndex to original index: $index"
               )
@@ -372,7 +368,7 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
             logger.info(
               s"Reindexing from temporary index $tempIndex to original index $index completed successfully."
             )
-            if (!this.openIndex(index)) {
+            if (!tryOrElse(this.openIndex(index), false)(logger)) {
               logger.error(s"Failed to open original index: $index")
               return false
             }
@@ -398,16 +394,16 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
         logger.error("Error during dynamic mapping migration")
         if (originalDeleted) {
           // If the original index was deleted, we need to recreate it
-          if (!this.createIndex(index, settings)) {
+          if (!tryOrElse(this.createIndex(index, settings), false)(logger)) {
             logger.error(s"Failed to recreate original index: $index")
           } else {
             logger.info(s"Original index $index recreated successfully.")
             // Set the original mapping back
-            if (!this.setMapping(index, mapping)) {
+            if (!tryOrElse(this.setMapping(index, mapping), false)(logger)) {
               logger.error(s"Failed to set mapping for original index: $index")
             } else {
               logger.info(s"Mapping for original index $index set successfully.")
-              if (!this.reindex(tempIndex, index)) {
+              if (!tryOrElse(this.reindex(tempIndex, index), false)(logger)) {
                 logger.error(
                   s"Failed to reindex from temporary index $tempIndex to original index $index"
                 )
@@ -415,7 +411,7 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
                 logger.info(
                   s"Reindexing from temporary index $tempIndex to original index $index completed successfully."
                 )
-                if (!this.refresh(index)) {
+                if (!tryOrElse(this.refresh(index), false)(logger)) {
                   logger.error(s"Failed to refresh original index: $index")
                 } else {
                   logger.info(s"Original index $index refreshed successfully.")
@@ -427,7 +423,7 @@ trait MappingApi extends IndicesApi with RefreshApi with StrictLogging {
       }
       if (tempCreated) {
         // Clean up the temporary index if it was created
-        if (!this.deleteIndex(tempIndex)) {
+        if (!tryOrElse(this.deleteIndex(tempIndex), false)(logger)) {
           logger.error(s"Failed to delete temporary index: $tempIndex")
         } else {
           logger.info(s"Temporary index $tempIndex deleted successfully.")

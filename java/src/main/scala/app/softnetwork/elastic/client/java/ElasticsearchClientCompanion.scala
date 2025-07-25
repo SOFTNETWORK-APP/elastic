@@ -76,11 +76,4 @@ trait ElasticsearchClientCompanion extends StrictLogging {
     promise.future
   }
 
-  protected def extractSource(value: AnyRef): Option[String] = {
-    val s = value.toString
-    val idx = s.indexOf(':')
-    if (idx >= 0 && idx + 1 < s.length) Some(s.substring(idx + 1).trim)
-    else None
-  }
-
 }
