@@ -6,7 +6,7 @@ import app.softnetwork.elastic.client.BulkAction.BulkAction
 import app.softnetwork.serialization._
 import com.google.gson.{Gson, JsonElement, JsonObject}
 import com.typesafe.config.{Config, ConfigFactory}
-import com.typesafe.scalalogging.StrictLogging
+import com.typesafe.scalalogging.{Logger, StrictLogging}
 import configs.ConfigReader
 import org.json4s.Formats
 
@@ -117,7 +117,7 @@ package object client {
   def docAsUpsert(doc: String): String = s"""{"doc":$doc,"doc_as_upsert":true}"""
 
   implicit class InnerHits(searchResult: JsonObject) {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     def ~>[M, I](
       innerField: String
     )(implicit formats: Formats, m: Manifest[M], i: Manifest[I]): List[(M, List[I])] = {
@@ -166,4 +166,14 @@ package object client {
   case class JSONQuery(query: String, indices: Seq[String], types: Seq[String] = Seq.empty)
 
   case class JSONQueries(queries: List[JSONQuery])
+
+  def tryOrElse[T](block: => T, default: => T)(implicit logger: Logger): T = {
+    try {
+      block
+    } catch {
+      case e: Exception =>
+        logger.error("An error occurred while executing the block", e)
+        default
+    }
+  }
 }
