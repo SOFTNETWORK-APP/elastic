@@ -1,6 +1,6 @@
-package app.softnetwork.elastic.client.java
+package app.softnetwork.elastic.persistence.query
 
-import app.softnetwork.elastic.persistence.query.ElasticProvider
+import app.softnetwork.elastic.client.java.ElasticsearchClientApi
 import app.softnetwork.persistence.ManifestWrapper
 import app.softnetwork.persistence.model.Timestamped
 
