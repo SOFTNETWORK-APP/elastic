@@ -63,10 +63,24 @@ trait ElasticClientSpec
     super.afterAll()
   }
 
+  val persons: List[String] = List(
+    """ { "uuid": "A12", "name": "Homer Simpson", "birthDate": "1967-11-21", "childrenCount": 0} """,
+    """ { "uuid": "A14", "name": "Moe Szyslak",   "birthDate": "1967-11-21", "childrenCount": 0} """,
+    """ { "uuid": "A16", "name": "Barney Gumble", "birthDate": "1969-05-09", "childrenCount": 0} """
+  )
+
+  private val personsWithUpsert =
+    persons :+ """ { "uuid": "A16", "name": "Barney Gumble2", "birthDate": "1969-05-09", "children": [{ "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"}, { "parentId": "A16", "name": "Josh Gumble", "birthDate": "2002-05-09"}], "childrenCount": 2 } """
+
+  val children: List[String] = List(
+    """ { "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"} """,
+    """ { "parentId": "A16", "name": "Josh Gumble", "birthDate": "1999-05-09"} """
+  )
+
   "Creating an index and then delete it" should "work fine" in {
     pClient.createIndex("create_delete")
     blockUntilIndexExists("create_delete")
-    "create_delete" should beCreated
+    "create_delete" should beCreated()
 
     pClient.deleteIndex("create_delete")
     blockUntilIndexNotExists("create_delete")
@@ -97,13 +111,7 @@ trait ElasticClientSpec
   "Toggle refresh" should "work" in {
     pClient.toggleRefresh("person", enable = false)
     new JsonParser()
-      .parse(pClient.loadSettings())
-      .getAsJsonObject
-      .get("person")
-      .getAsJsonObject
-      .get("settings")
-      .getAsJsonObject
-      .get("index")
+      .parse(pClient.loadSettings("person"))
       .getAsJsonObject
       .get("refresh_interval")
       .getAsString shouldBe "-1"
@@ -112,13 +120,7 @@ trait ElasticClientSpec
     pClient.toggleRefresh("person", enable = true)
     //    settings.getOrElse("index.refresh_interval", "") shouldBe "1s"
     new JsonParser()
-      .parse(pClient.loadSettings())
-      .getAsJsonObject
-      .get("person")
-      .getAsJsonObject
-      .get("settings")
-      .getAsJsonObject
-      .get("index")
+      .parse(pClient.loadSettings("person"))
       .getAsJsonObject
       .get("refresh_interval")
       .getAsString shouldBe "1s"
@@ -141,19 +143,172 @@ trait ElasticClientSpec
     settings.getOrElse("index.number_of_replicas", "") shouldBe "0"
   }
 
-  val persons: List[String] = List(
-    """ { "uuid": "A12", "name": "Homer Simpson", "birthDate": "1967-11-21", "childrenCount": 0} """,
-    """ { "uuid": "A14", "name": "Moe Szyslak",   "birthDate": "1967-11-21", "childrenCount": 0} """,
-    """ { "uuid": "A16", "name": "Barney Gumble", "birthDate": "1969-05-09", "childrenCount": 0} """
-  )
+  "Setting a mapping" should "work" in {
+    pClient.createIndex("person_mapping")
+    blockUntilIndexExists("person_mapping")
+    "person_mapping" should beCreated()
 
-  private val personsWithUpsert =
-    persons :+ """ { "uuid": "A16", "name": "Barney Gumble2", "birthDate": "1969-05-09", "children": [{ "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"}, { "parentId": "A16", "name": "Josh Gumble", "birthDate": "2002-05-09"}], "childrenCount": 2 } """
+    val mapping =
+      """{
+        |    "properties": {
+        |        "birthDate": {
+        |            "type": "date"
+        |        },
+        |        "uuid": {
+        |            "type": "keyword"
+        |        },
+        |        "name": {
+        |            "type": "text",
+        |            "analyzer": "ngram_analyzer",
+        |            "search_analyzer": "search_analyzer",
+        |            "fields": {
+        |                "raw": {
+        |                    "type": "keyword"
+        |                },
+        |                "fr": {
+        |                    "type": "text",
+        |                    "analyzer": "french"
+        |                }
+        |            }
+        |        }
+        |    }
+        |}""".stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    pClient.setMapping("person_mapping", mapping) shouldBe true
 
-  val children: List[String] = List(
-    """ { "parentId": "A16", "name": "Steve Gumble", "birthDate": "1999-05-09"} """,
-    """ { "parentId": "A16", "name": "Josh Gumble", "birthDate": "1999-05-09"} """
-  )
+    val properties = pClient.getMappingProperties("person_mapping")
+    logger.info(s"properties: $properties")
+    MappingComparator.isMappingDifferent(
+      properties,
+      mapping
+    ) shouldBe false
+
+    implicit val bulkOptions: BulkOptions = BulkOptions("person_mapping", "person", 1000)
+    val indices = pClient.bulk[String](persons.iterator, identity, Some("uuid"), None, None)
+    refresh(indices)
+    pClient.flush("person_mapping")
+
+    indices should contain only "person_mapping"
+
+    blockUntilCount(3, "person_mapping")
+
+    "person_mapping" should haveCount(3)
+
+    pClient.search[Person]("select * from person_mapping") match {
+      case r if r.size == 3 =>
+        r.map(_.uuid) should contain allOf ("A12", "A14", "A16")
+      case other => fail(other.toString)
+    }
+
+    pClient.search[Person]("select * from person_mapping where uuid = 'A16'") match {
+      case r if r.size == 1 =>
+        r.map(_.uuid) should contain only "A16"
+      case other => fail(other.toString)
+    }
+
+    pClient.search[Person]("select * from person_mapping where match(name, 'gum')") match {
+      case r if r.size == 1 =>
+        r.map(_.uuid) should contain only "A16"
+      case other => fail(other.toString)
+    }
+
+    pClient.search[Person](
+      "select * from person_mapping where uuid <> 'A16' and match(name, 'gum')"
+    ) match {
+      case r if r.isEmpty =>
+      case other          => fail(other.toString)
+    }
+  }
+
+  "Updating a mapping" should "work" in {
+    val mapping =
+      """{
+        |  "properties": {
+        |    "name": {
+        |      "type": "keyword"
+        |    },
+        |    "birthDate": {
+        |      "type": "date"
+        |    },
+        |    "uuid": {
+        |      "type": "keyword"
+        |    },
+        |    "childrenCount": {
+        |      "type": "integer"
+        |    }
+        |  }
+        |}
+      """.stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    pClient.updateMapping("person_migration", mapping) shouldBe true
+    blockUntilIndexExists("person_migration")
+    "person_migration" should beCreated()
+
+    implicit val bulkOptions: BulkOptions = BulkOptions("person_migration", "person", 1000)
+    val indices = pClient.bulk[String](persons.iterator, identity, Some("uuid"), None, None)
+    refresh(indices)
+    pClient.flush("person_migration")
+
+    indices should contain only "person_migration"
+
+    blockUntilCount(3, "person_migration")
+
+    "person_migration" should haveCount(3)
+
+    pClient.search[Person]("select * from person_migration where name like '%gum%'") match {
+      case r if r.isEmpty =>
+      case other          => fail(other.toString)
+    }
+
+    val newMapping =
+      """{
+        |  "properties": {
+        |    "birthDate": {
+        |      "type": "date"
+        |    },
+        |    "uuid": {
+        |      "type": "keyword"
+        |    },
+        |    "name": {
+        |      "type": "text",
+        |      "analyzer": "ngram_analyzer",
+        |      "search_analyzer": "search_analyzer",
+        |      "fields": {
+        |        "raw": {
+        |          "type": "keyword"
+        |        },
+        |        "fr": {
+        |          "type": "text",
+        |          "analyzer": "french"
+        |        }
+        |      }
+        |    },
+        |    "childrenCount": {
+        |      "type": "integer"
+        |    },
+        |    "children": {
+        |      "type": "nested",
+        |      "include_in_parent": true,
+        |      "properties": {
+        |        "name": {
+        |          "type": "keyword"
+        |        },
+        |        "birthDate": {
+        |          "type": "date"
+        |        }
+        |      }
+        |    }
+        |  }
+        |}
+      """.stripMargin.replaceAll("\n", "").replaceAll("\\s+", "")
+    pClient.shouldUpdateMapping("person_migration", newMapping) shouldBe true
+    pClient.updateMapping("person_migration", newMapping) shouldBe true
+
+    pClient.search[Person]("select * from person_migration where name like '%gum%'") match {
+      case r if r.size == 1 =>
+        r.map(_.uuid) should contain only "A16"
+      case other => fail(other.toString)
+    }
+
+  }
 
   "Bulk index valid json without id key and suffix key" should "work" in {
     implicit val bulkOptions: BulkOptions = BulkOptions("person1", "person", 2)
@@ -382,7 +537,7 @@ trait ElasticClientSpec
     r2.size should ===(1)
     r2.map(_.uuid) should contain("A16")
 
-    pClient.searchAsync[Person](SQLQuery("select * from person7 where _id=\"A16\"")) onComplete {
+    pClient.searchAsync[Person]("select * from person7 where _id=\"A16\"") onComplete {
       case Success(r) =>
         r.size should ===(1)
         r.map(_.uuid) should contain("A16")
@@ -520,7 +675,7 @@ trait ElasticClientSpec
     bClient.setMapping("binaries", mapping) shouldBe true
     val mappings = bClient.getMapping("binaries")
     logger.info(s"mappings: $mappings")
-    assert("{\"binaries\":{\"mappings\":" + mapping + "}}" == mappings)
+    assert("{\"mappings\":" + mapping + "}" == mappings)
     for (uuid <- Seq("png", "jpg", "pdf")) {
       val path =
         Paths.get(Thread.currentThread().getContextClassLoader.getResource(s"avatar.$uuid").getPath)
@@ -613,43 +768,27 @@ trait ElasticClientSpec
     }
 
     // test count aggregation
-    pClient
-      .aggregate(
-        "select count(p.uuid) as c from person10 p"
-      )
-      .complete() match {
+    pClient.aggregate("select count(p.uuid) as c from person10 p").complete() match {
       case Success(s) => s.headOption.flatMap(_.asDoubleOption).getOrElse(0d) should ===(3d)
       case Failure(f) => fail(f.getMessage)
     }
 
     // test max aggregation on date field
-    pClient
-      .aggregate(
-        "select max(p.birthDate) as c from person10 p"
-      )
-      .complete() match {
+    pClient.aggregate("select max(p.birthDate) as c from person10 p").complete() match {
       case Success(s) =>
         s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1969-05-09T00:00:00.000Z")
       case Failure(f) => fail(f.getMessage)
     }
 
     // test min aggregation on date field
-    pClient
-      .aggregate(
-        "select min(p.birthDate) as c from person10 p"
-      )
-      .complete() match {
+    pClient.aggregate("select min(p.birthDate) as c from person10 p").complete() match {
       case Success(s) =>
         s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1967-11-21T00:00:00.000Z")
       case Failure(f) => fail(f.getMessage)
     }
 
     // test avg aggregation on date field
-    pClient
-      .aggregate(
-        "select avg(p.birthDate) as c from person10 p"
-      )
-      .complete() match {
+    pClient.aggregate("select avg(p.birthDate) as c from person10 p").complete() match {
       case Success(s) =>
         s.headOption.flatMap(_.asStringOption).getOrElse("") should ===("1968-05-17T08:00:00.000Z")
       case Failure(f) => fail(f.getMessage)

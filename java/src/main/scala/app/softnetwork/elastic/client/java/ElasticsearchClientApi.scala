@@ -18,12 +18,14 @@ import co.elastic.clients.elasticsearch.core.bulk.{
 }
 import co.elastic.clients.elasticsearch.core.msearch.{MultisearchHeader, RequestItem}
 import co.elastic.clients.elasticsearch.core._
+import co.elastic.clients.elasticsearch.core.reindex.{Destination, Source}
 import co.elastic.clients.elasticsearch.core.search.SearchRequestBody
 import co.elastic.clients.elasticsearch.indices.update_aliases.{Action, AddAction, RemoveAction}
-import co.elastic.clients.elasticsearch.indices._
+import co.elastic.clients.elasticsearch.indices.{ExistsRequest => IndexExistsRequest, _}
+import co.elastic.clients.json.jackson.JacksonJsonpMapper
 import com.google.gson.{Gson, JsonParser}
 
-import _root_.java.io.StringReader
+import _root_.java.io.{StringReader, StringWriter}
 import _root_.java.util.{Map => JMap}
 import scala.jdk.CollectionConverters._
 import org.json4s.Formats
@@ -51,60 +53,116 @@ trait ElasticsearchClientApi
 
 trait ElasticsearchClientIndicesApi extends IndicesApi with ElasticsearchClientCompanion {
   override def createIndex(index: String, settings: String): Boolean = {
-    apply()
-      .indices()
-      .create(
-        new CreateIndexRequest.Builder()
-          .index(index)
-          .settings(new IndexSettings.Builder().withJson(new StringReader(settings)).build())
-          .build()
-      )
-      .acknowledged()
+    tryOrElse(
+      apply()
+        .indices()
+        .create(
+          new CreateIndexRequest.Builder()
+            .index(index)
+            .settings(new IndexSettings.Builder().withJson(new StringReader(settings)).build())
+            .build()
+        )
+        .acknowledged(),
+      false
+    )(logger)
   }
 
   override def deleteIndex(index: String): Boolean = {
-    apply().indices().delete(new DeleteIndexRequest.Builder().index(index).build()).acknowledged()
+    tryOrElse(
+      apply()
+        .indices()
+        .delete(new DeleteIndexRequest.Builder().index(index).build())
+        .acknowledged(),
+      false
+    )(logger)
   }
 
   override def openIndex(index: String): Boolean = {
-    apply().indices().open(new OpenRequest.Builder().index(index).build()).acknowledged()
+    tryOrElse(
+      apply().indices().open(new OpenRequest.Builder().index(index).build()).acknowledged(),
+      false
+    )(logger)
   }
 
   override def closeIndex(index: String): Boolean = {
-    apply().indices().close(new CloseIndexRequest.Builder().index(index).build()).acknowledged()
+    tryOrElse(
+      apply().indices().close(new CloseIndexRequest.Builder().index(index).build()).acknowledged(),
+      false
+    )(logger)
   }
 
+  override def reindex(
+    sourceIndex: String,
+    targetIndex: String,
+    refresh: Boolean = true
+  ): Boolean = {
+    val failures = apply()
+      .reindex(
+        new ReindexRequest.Builder()
+          .source(new Source.Builder().index(sourceIndex).build())
+          .dest(new Destination.Builder().index(targetIndex).build())
+          .refresh(refresh)
+          .build()
+      )
+      .failures()
+      .asScala
+      .map(_.cause().reason())
+    if (failures.nonEmpty) {
+      logger.error(
+        s"Reindexing from $sourceIndex to $targetIndex failed with errors: ${failures.take(100).mkString(", ")}"
+      )
+    }
+    failures.isEmpty
+  }
+
+  override def indexExists(index: String): Boolean = {
+    tryOrElse(
+      apply()
+        .indices()
+        .exists(
+          new IndexExistsRequest.Builder().index(index).build()
+        )
+        .value(),
+      false
+    )(logger)
+  }
 }
 
 trait ElasticsearchClientAliasApi extends AliasApi with ElasticsearchClientCompanion {
   override def addAlias(index: String, alias: String): Boolean = {
-    apply()
-      .indices()
-      .updateAliases(
-        new UpdateAliasesRequest.Builder()
-          .actions(
-            new Action.Builder()
-              .add(new AddAction.Builder().index(index).alias(alias).build())
-              .build()
-          )
-          .build()
-      )
-      .acknowledged()
+    tryOrElse(
+      apply()
+        .indices()
+        .updateAliases(
+          new UpdateAliasesRequest.Builder()
+            .actions(
+              new Action.Builder()
+                .add(new AddAction.Builder().index(index).alias(alias).build())
+                .build()
+            )
+            .build()
+        )
+        .acknowledged(),
+      false
+    )(logger)
   }
 
   override def removeAlias(index: String, alias: String): Boolean = {
-    apply()
-      .indices()
-      .updateAliases(
-        new UpdateAliasesRequest.Builder()
-          .actions(
-            new Action.Builder()
-              .remove(new RemoveAction.Builder().index(index).alias(alias).build())
-              .build()
-          )
-          .build()
-      )
-      .acknowledged()
+    tryOrElse(
+      apply()
+        .indices()
+        .updateAliases(
+          new UpdateAliasesRequest.Builder()
+            .actions(
+              new Action.Builder()
+                .remove(new RemoveAction.Builder().index(index).alias(alias).build())
+                .build()
+            )
+            .build()
+        )
+        .acknowledged(),
+      false
+    )(logger)
   }
 }
 
@@ -112,83 +170,128 @@ trait ElasticsearchClientSettingsApi extends SettingsApi with ElasticsearchClien
   _: ElasticsearchClientIndicesApi =>
 
   override def updateSettings(index: String, settings: String): Boolean = {
-    apply()
-      .indices()
-      .putSettings(
-        new PutIndicesSettingsRequest.Builder()
-          .index(index)
-          .settings(new IndexSettings.Builder().withJson(new StringReader(settings)).build())
-          .build()
-      )
-      .acknowledged()
+    tryOrElse(
+      apply()
+        .indices()
+        .putSettings(
+          new PutIndicesSettingsRequest.Builder()
+            .index(index)
+            .settings(new IndexSettings.Builder().withJson(new StringReader(settings)).build())
+            .build()
+        )
+        .acknowledged(),
+      false
+    )(logger)
   }
 
-  override def loadSettings(): String = {
-    val settings = apply()
-      .indices()
-      .getSettings(
-        new GetIndicesSettingsRequest.Builder().index("*").build()
-      )
-    extractSource(settings).getOrElse("")
+  override def loadSettings(index: String): String = {
+    tryOrElse(
+      Option(
+        apply()
+          .indices()
+          .getSettings(
+            new GetIndicesSettingsRequest.Builder().index(index).build()
+          )
+          .get(index)
+      ).map { value =>
+        val mapper = new JacksonJsonpMapper()
+        val writer = new StringWriter()
+        val generator = mapper.jsonProvider().createGenerator(writer)
+        mapper.serialize(value.settings().index(), generator)
+        generator.close()
+        writer.toString
+      },
+      None
+    )(logger).getOrElse("{}")
   }
 }
 
-trait ElasticsearchClientMappingApi extends MappingApi with ElasticsearchClientCompanion {
+trait ElasticsearchClientMappingApi
+    extends MappingApi
+    with ElasticsearchClientIndicesApi
+    with ElasticsearchClientRefreshApi
+    with ElasticsearchClientCompanion {
   override def setMapping(index: String, mapping: String): Boolean = {
-    apply()
-      .indices()
-      .putMapping(
-        new PutMappingRequest.Builder().index(index).withJson(new StringReader(mapping)).build()
-      )
-      .acknowledged()
+    tryOrElse(
+      apply()
+        .indices()
+        .putMapping(
+          new PutMappingRequest.Builder().index(index).withJson(new StringReader(mapping)).build()
+        )
+        .acknowledged(),
+      false
+    )(logger)
   }
 
   override def getMapping(index: String): String = {
-    val mapping = apply()
-      .indices()
-      .getMapping(
-        new GetMappingRequest.Builder().index(index).build()
-      )
-    extractSource(mapping).getOrElse("")
+    tryOrElse(
+      {
+        Option(
+          apply()
+            .indices()
+            .getMapping(
+              new GetMappingRequest.Builder().index(index).build()
+            )
+            .get(index)
+        ).map { value =>
+          val mapper = new JacksonJsonpMapper()
+          val writer = new StringWriter()
+          val generator = mapper.jsonProvider().createGenerator(writer)
+          mapper.serialize(value, generator)
+          generator.close()
+          writer.toString
+        }
+      },
+      None
+    )(logger).getOrElse(s""""{$index: {"mappings": {}}}""")
   }
 }
 
 trait ElasticsearchClientRefreshApi extends RefreshApi with ElasticsearchClientCompanion {
   override def refresh(index: String): Boolean = {
-    apply()
-      .indices()
-      .refresh(
-        new RefreshRequest.Builder().index(index).build()
-      )
-      .shards()
-      .failed()
-      .intValue() == 0
+    tryOrElse(
+      apply()
+        .indices()
+        .refresh(
+          new RefreshRequest.Builder().index(index).build()
+        )
+        .shards()
+        .failed()
+        .intValue() == 0,
+      false
+    )(logger)
   }
 }
 
 trait ElasticsearchClientFlushApi extends FlushApi with ElasticsearchClientCompanion {
   override def flush(index: String, force: Boolean = true, wait: Boolean = true): Boolean = {
-    apply()
-      .indices()
-      .flush(
-        new FlushRequest.Builder().index(index).force(force).waitIfOngoing(wait).build()
-      )
-      .shards()
-      .failed()
-      .intValue() == 0
+    tryOrElse(
+      apply()
+        .indices()
+        .flush(
+          new FlushRequest.Builder().index(index).force(force).waitIfOngoing(wait).build()
+        )
+        .shards()
+        .failed()
+        .intValue() == 0,
+      false
+    )(logger)
   }
 }
 
 trait ElasticsearchClientCountApi extends CountApi with ElasticsearchClientCompanion {
   override def count(query: client.JSONQuery): Option[Double] = {
-    Option(
-      apply()
-        .count(
-          new CountRequest.Builder().index(query.indices.asJava).build()
-        )
-        .count()
-        .toDouble
-    )
+    tryOrElse(
+      Option(
+        apply()
+          .count(
+            new CountRequest.Builder().index(query.indices.asJava).build()
+          )
+          .count()
+          .toDouble
+      ),
+      None
+    )(logger)
   }
 
   override def countAsync(query: client.JSONQuery)(implicit
@@ -336,17 +439,20 @@ trait ElasticsearchClientSingleValueAggregateApi
 trait ElasticsearchClientIndexApi extends IndexApi with ElasticsearchClientCompanion {
   _: ElasticsearchClientRefreshApi =>
   override def index(index: String, id: String, source: String): Boolean = {
-    apply()
-      .index(
-        new IndexRequest.Builder()
-          .index(index)
-          .id(id)
-          .withJson(new StringReader(source))
-          .build()
-      )
-      .shards()
-      .failed()
-      .intValue() == 0
+    tryOrElse(
+      apply()
+        .index(
+          new IndexRequest.Builder()
+            .index(index)
+            .id(id)
+            .withJson(new StringReader(source))
+            .build()
+        )
+        .shards()
+        .failed()
+        .intValue() == 0,
+      false
+    )(logger)
   }
 
   override def indexAsync(index: String, id: String, source: String)(implicit
@@ -379,19 +485,22 @@ trait ElasticsearchClientUpdateApi extends UpdateApi with ElasticsearchClientCom
     source: String,
     upsert: Boolean
   ): Boolean = {
-    apply()
-      .update(
-        new UpdateRequest.Builder[JMap[String, Object], JMap[String, Object]]()
-          .index(index)
-          .id(id)
-          .doc(mapper.readValue(source, classOf[JMap[String, Object]]))
-          .docAsUpsert(upsert)
-          .build(),
-        classOf[JMap[String, Object]]
-      )
-      .shards()
-      .failed()
-      .intValue() == 0
+    tryOrElse(
+      apply()
+        .update(
+          new UpdateRequest.Builder[JMap[String, Object], JMap[String, Object]]()
+            .index(index)
+            .id(id)
+            .doc(mapper.readValue(source, classOf[JMap[String, Object]]))
+            .docAsUpsert(upsert)
+            .build(),
+          classOf[JMap[String, Object]]
+        )
+        .shards()
+        .failed()
+        .intValue() == 0,
+      false
+    )(logger)
   }
 
   override def updateAsync(index: String, id: String, source: String, upsert: Boolean)(implicit
@@ -422,13 +531,16 @@ trait ElasticsearchClientDeleteApi extends DeleteApi with ElasticsearchClientCom
   _: ElasticsearchClientRefreshApi =>
 
   override def delete(uuid: String, index: String): Boolean = {
-    apply()
-      .delete(
-        new DeleteRequest.Builder().index(index).id(uuid).build()
-      )
-      .shards()
-      .failed()
-      .intValue() == 0
+    tryOrElse(
+      apply()
+        .delete(
+          new DeleteRequest.Builder().index(index).id(uuid).build()
+        )
+        .shards()
+        .failed()
+        .intValue() == 0,
+      false
+    )(logger)
   }
 
   override def deleteAsync(uuid: String, index: String)(implicit
@@ -677,19 +789,19 @@ trait ElasticsearchClientSearchApi extends SearchApi with ElasticsearchClientCom
               .map(_.hits().hits().asScala.toList)
               .getOrElse(Nil)
             val innerObjects = innerHits.flatMap { innerHit =>
-              extractSource(innerHit) match {
-                case Some(innerSource) =>
-                  logger.whenDebugEnabled(s"Processing inner hit: $innerSource")
-                  val json = new JsonParser().parse(innerSource).getAsJsonObject
-                  val gson = new Gson()
-                  Try(serialization.read[I](gson.toJson(json.get("_source")))) match {
-                    case Success(innerObject) => Some(innerObject)
-                    case Failure(f) =>
-                      logger.error(s"Failed to deserialize inner hit: $innerSource", f)
-                      None
-                  }
-                case None =>
-                  logger.warn("Could not extract inner hit source from string representation")
+              val mapper = new JacksonJsonpMapper()
+              val writer = new StringWriter()
+              val generator = mapper.jsonProvider().createGenerator(writer)
+              mapper.serialize(innerHit, generator)
+              generator.close()
+              val innerSource = writer.toString
+              logger.whenDebugEnabled(s"Processing inner hit: $innerSource")
+              val json = new JsonParser().parse(innerSource).getAsJsonObject
+              val gson = new Gson()
+              Try(serialization.read[I](gson.toJson(json.get("_source")))) match {
+                case Success(innerObject) => Some(innerObject)
+                case Failure(f) =>
+                  logger.error(s"Failed to deserialize inner hit: $innerSource", f)
                   None
               }
             }
